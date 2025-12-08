@@ -81,6 +81,8 @@ const Index = () => {
       if (error) throw error;
       return data as Claim[];
     },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Fetch adjudication status
@@ -94,6 +96,8 @@ const Index = () => {
       if (error) throw error;
       return data as AdjudicationStatus[];
     },
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Calculate metrics
