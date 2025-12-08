@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Loader2, Shield, User, Users } from 'lucide-react';
+import { Loader2, Shield, User, Users, UserCheck } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 type AppRole = Database['public']['Enums']['app_role'];
@@ -116,7 +116,7 @@ const UserManagement = () => {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -134,6 +134,17 @@ const UserManagement = () => {
             <CardContent>
               <div className="text-2xl font-bold">
                 {users.filter(u => u.role === 'admin').length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Collaborators</CardTitle>
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {users.filter(u => u.role === 'collaborator').length}
               </div>
             </CardContent>
           </Card>
@@ -184,7 +195,7 @@ const UserManagement = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={userItem.role === 'admin' ? 'default' : 'secondary'}>
+                        <Badge variant={userItem.role === 'admin' ? 'default' : userItem.role === 'collaborator' ? 'outline' : 'secondary'}>
                           {userItem.role}
                         </Badge>
                       </TableCell>
@@ -209,6 +220,7 @@ const UserManagement = () => {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="user">User</SelectItem>
+                              <SelectItem value="collaborator">Collaborator</SelectItem>
                               <SelectItem value="admin">Admin</SelectItem>
                             </SelectContent>
                           </Select>
