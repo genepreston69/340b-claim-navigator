@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useDebounce } from "use-debounce";
 import { 
   Filter, 
   ArrowUpDown, 
@@ -64,141 +65,156 @@ const Adjudication = () => {
   const [sortField, setSortField] = useState<SortField>("prescribed_date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedRow, setSelectedRow] = useState<AdjudicationStatus | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
 
-  // Fetch adjudication data
-  const { data: adjudicationData, isLoading, error } = useQuery({
-    queryKey: ["adjudication_status"],
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, pharmacyFilter, debouncedSearchQuery, dateFrom, dateTo, sortField, sortDirection]);
+
+  // Fetch filter options from full dataset
+  const { data: filterOptions } = useQuery({
+    queryKey: ["adjudication-filter-options"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("adjudication_status")
+        .from("adjudication_filter_options")
         .select("*");
       
       if (error) throw error;
-      return data as AdjudicationStatus[];
+      
+      const pharmacies: string[] = [];
+      const statuses: string[] = [];
+      
+      (data || []).forEach((row: { filter_type: string; filter_value: string | null }) => {
+        if (row.filter_value) {
+          if (row.filter_type === "pharmacy") {
+            pharmacies.push(row.filter_value);
+          } else if (row.filter_type === "status") {
+            statuses.push(row.filter_value);
+          }
+        }
+      });
+      
+      return { pharmacies: pharmacies.sort(), statuses };
     },
   });
 
-  // Get unique pharmacies for filter
-  const pharmacies = useMemo(() => {
-    if (!adjudicationData) return [];
-    const uniquePharmacies = [...new Set(adjudicationData.map(d => d.pharmacy_name).filter(Boolean))];
-    return uniquePharmacies.sort();
-  }, [adjudicationData]);
+  // Fetch summary stats (without pagination for aggregate calculations)
+  const { data: statsData } = useQuery({
+    queryKey: ["adjudication-stats", statusFilter === "all" ? null : statusFilter, pharmacyFilter, debouncedSearchQuery, dateFrom?.toISOString(), dateTo?.toISOString()],
+    queryFn: async () => {
+      let query = supabase
+        .from("adjudication_status")
+        .select("adjudication_status, fills_adjudicated, fills_remaining, refills_authorized, total_payments");
 
-  // Filter and sort data
-  const filteredData = useMemo(() => {
-    if (!adjudicationData) return [];
-
-    let filtered = adjudicationData;
-
-    // Status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(d => d.adjudication_status === statusFilter);
-    }
-
-    // Pharmacy filter
-    if (pharmacyFilter !== "all") {
-      filtered = filtered.filter(d => d.pharmacy_name === pharmacyFilter);
-    }
-
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(d => 
-        d.patient_name?.toLowerCase().includes(query) ||
-        d.medication_name?.toLowerCase().includes(query) ||
-        d.patient_mrn?.toLowerCase().includes(query) ||
-        d.ndc_code?.toLowerCase().includes(query)
-      );
-    }
-
-    // Date range filter
-    if (dateFrom) {
-      filtered = filtered.filter(d => {
-        if (!d.prescribed_date) return false;
-        return new Date(d.prescribed_date) >= dateFrom;
-      });
-    }
-    if (dateTo) {
-      filtered = filtered.filter(d => {
-        if (!d.prescribed_date) return false;
-        return new Date(d.prescribed_date) <= dateTo;
-      });
-    }
-
-    // Sort
-    filtered.sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
-
-      if (aVal === null || aVal === undefined) return 1;
-      if (bVal === null || bVal === undefined) return -1;
-
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortDirection === "asc" 
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
+      // Apply same filters for consistent stats
+      if (pharmacyFilter !== "all") {
+        query = query.eq("pharmacy_name", pharmacyFilter);
+      }
+      if (dateFrom) {
+        query = query.gte("prescribed_date", format(dateFrom, "yyyy-MM-dd"));
+      }
+      if (dateTo) {
+        query = query.lte("prescribed_date", format(dateTo, "yyyy-MM-dd"));
+      }
+      if (debouncedSearchQuery) {
+        query = query.or(`patient_name.ilike.%${debouncedSearchQuery}%,medication_name.ilike.%${debouncedSearchQuery}%,patient_mrn.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
       }
 
-      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-    return filtered;
-  }, [adjudicationData, statusFilter, pharmacyFilter, searchQuery, dateFrom, dateTo, sortField, sortDirection]);
-
-  // Summary stats based on filtered data (respecting date range)
+  // Calculate stats from fetched data
   const stats = useMemo(() => {
-    // Use filteredData to respect active filters for stats
-    const dataForStats = filteredData;
-    
-    if (!dataForStats || dataForStats.length === 0) {
+    if (!statsData || statsData.length === 0) {
       return { 
-        total: 0, 
-        neverFilled: 0, 
-        partial: 0, 
-        complete: 0,
-        neverFilledPct: 0,
-        partialPct: 0,
-        completePct: 0,
-        pendingRevenue: 0
+        total: 0, neverFilled: 0, partial: 0, complete: 0,
+        neverFilledPct: 0, partialPct: 0, completePct: 0, pendingRevenue: 0
       };
     }
 
-    const total = dataForStats.length;
-    const neverFilled = dataForStats.filter(d => d.adjudication_status === "Never Filled").length;
-    const partial = dataForStats.filter(d => d.adjudication_status === "Partial").length;
-    const complete = dataForStats.filter(d => d.adjudication_status === "Complete").length;
+    const total = statsData.length;
+    const neverFilled = statsData.filter(d => d.adjudication_status === "Never Filled").length;
+    const partial = statsData.filter(d => d.adjudication_status === "Partial").length;
+    const complete = statsData.filter(d => d.adjudication_status === "Complete").length;
 
-    // Calculate pending revenue (estimated value of unfilled scripts)
-    // For Never Filled: use total_payments from Complete scripts as average
-    // For Partial: multiply remaining fills by average payment per fill
-    const completeScripts = dataForStats.filter(d => d.adjudication_status === "Complete");
+    const completeScripts = statsData.filter(d => d.adjudication_status === "Complete");
     const avgPaymentPerFill = completeScripts.length > 0 
       ? completeScripts.reduce((sum, d) => sum + (d.total_payments || 0), 0) / 
         completeScripts.reduce((sum, d) => sum + (d.fills_adjudicated || 1), 0)
-      : 50; // Default estimate if no complete scripts
+      : 50;
 
-    const neverFilledRevenue = dataForStats
+    const neverFilledRevenue = statsData
       .filter(d => d.adjudication_status === "Never Filled")
       .reduce((sum, d) => sum + ((d.refills_authorized ?? 0) + 1) * avgPaymentPerFill, 0);
 
-    const partialRevenue = dataForStats
+    const partialRevenue = statsData
       .filter(d => d.adjudication_status === "Partial")
       .reduce((sum, d) => sum + (d.fills_remaining ?? 0) * avgPaymentPerFill, 0);
 
     return {
-      total,
-      neverFilled,
-      partial,
-      complete,
+      total, neverFilled, partial, complete,
       neverFilledPct: total > 0 ? Math.round((neverFilled / total) * 100) : 0,
       partialPct: total > 0 ? Math.round((partial / total) * 100) : 0,
       completePct: total > 0 ? Math.round((complete / total) * 100) : 0,
       pendingRevenue: neverFilledRevenue + partialRevenue
     };
-  }, [filteredData]);
+  }, [statsData]);
+
+  // Fetch paginated adjudication data
+  const { data: paginatedResult, isLoading, error } = useQuery({
+    queryKey: [
+      "adjudication-paginated",
+      currentPage, pageSize, sortField, sortDirection,
+      statusFilter, pharmacyFilter, debouncedSearchQuery,
+      dateFrom?.toISOString(), dateTo?.toISOString()
+    ],
+    queryFn: async () => {
+      let query = supabase
+        .from("adjudication_status")
+        .select("*", { count: "exact" });
+
+      // Apply filters
+      if (statusFilter !== "all") {
+        query = query.eq("adjudication_status", statusFilter);
+      }
+      if (pharmacyFilter !== "all") {
+        query = query.eq("pharmacy_name", pharmacyFilter);
+      }
+      if (dateFrom) {
+        query = query.gte("prescribed_date", format(dateFrom, "yyyy-MM-dd"));
+      }
+      if (dateTo) {
+        query = query.lte("prescribed_date", format(dateTo, "yyyy-MM-dd"));
+      }
+      if (debouncedSearchQuery) {
+        query = query.or(`patient_name.ilike.%${debouncedSearchQuery}%,medication_name.ilike.%${debouncedSearchQuery}%,patient_mrn.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
+      }
+
+      // Apply sorting
+      query = query.order(sortField, { ascending: sortDirection === "asc", nullsFirst: false });
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+      
+      return { data: data as AdjudicationStatus[], totalCount: count || 0 };
+    },
+  });
+
+  const adjudicationData = paginatedResult?.data || [];
+  const totalCount = paginatedResult?.totalCount || 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -241,7 +257,6 @@ const Adjudication = () => {
 
         {/* Summary Cards */}
         <div className="grid gap-4 md:grid-cols-5">
-          {/* Total Scripts */}
           <Card 
             className={cn(
               "cursor-pointer hover:shadow-md transition-all",
@@ -253,7 +268,7 @@ const Adjudication = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Scripts</p>
-                  <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.total.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground mt-1">In selected filters</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -263,7 +278,6 @@ const Adjudication = () => {
             </CardContent>
           </Card>
 
-          {/* Never Filled */}
           <Card 
             className={cn(
               "cursor-pointer hover:shadow-md transition-all border-l-4 border-l-destructive",
@@ -275,7 +289,7 @@ const Adjudication = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Never Filled</p>
-                  <p className="text-2xl font-bold text-destructive">{stats.neverFilled}</p>
+                  <p className="text-2xl font-bold text-destructive">{stats.neverFilled.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground mt-1">{stats.neverFilledPct}% of total</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-destructive/10 flex items-center justify-center">
@@ -285,7 +299,6 @@ const Adjudication = () => {
             </CardContent>
           </Card>
 
-          {/* Partial Fills */}
           <Card 
             className={cn(
               "cursor-pointer hover:shadow-md transition-all border-l-4 border-l-warning",
@@ -297,7 +310,7 @@ const Adjudication = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Partial Fills</p>
-                  <p className="text-2xl font-bold text-warning">{stats.partial}</p>
+                  <p className="text-2xl font-bold text-warning">{stats.partial.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground mt-1">{stats.partialPct}% of total</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
@@ -307,7 +320,6 @@ const Adjudication = () => {
             </CardContent>
           </Card>
 
-          {/* Complete */}
           <Card 
             className={cn(
               "cursor-pointer hover:shadow-md transition-all border-l-4 border-l-success",
@@ -319,7 +331,7 @@ const Adjudication = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Complete</p>
-                  <p className="text-2xl font-bold text-success">{stats.complete}</p>
+                  <p className="text-2xl font-bold text-success">{stats.complete.toLocaleString()}</p>
                   <p className="text-xs text-muted-foreground mt-1">{stats.completePct}% of total</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center">
@@ -329,7 +341,6 @@ const Adjudication = () => {
             </CardContent>
           </Card>
 
-          {/* Pending Revenue */}
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -365,7 +376,6 @@ const Adjudication = () => {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-5">
-              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -376,7 +386,6 @@ const Adjudication = () => {
                 />
               </div>
 
-              {/* Status Filter */}
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Status" />
@@ -389,20 +398,18 @@ const Adjudication = () => {
                 </SelectContent>
               </Select>
 
-              {/* Pharmacy Filter */}
               <Select value={pharmacyFilter} onValueChange={setPharmacyFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="Pharmacy" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Pharmacies</SelectItem>
-                  {pharmacies.map(pharmacy => (
-                    <SelectItem key={pharmacy} value={pharmacy!}>{pharmacy}</SelectItem>
+                  {filterOptions?.pharmacies.map(pharmacy => (
+                    <SelectItem key={pharmacy} value={pharmacy}>{pharmacy}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
 
-              {/* Date From */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -427,7 +434,6 @@ const Adjudication = () => {
                 </PopoverContent>
               </Popover>
 
-              {/* Date To */}
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -458,7 +464,22 @@ const Adjudication = () => {
         {/* Data Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Prescriptions ({filteredData.length})</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Prescriptions ({totalCount.toLocaleString()})</CardTitle>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Show:</span>
+                <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(parseInt(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -469,115 +490,161 @@ const Adjudication = () => {
               <div className="text-center py-8 text-destructive">
                 Error loading data. Please try again.
               </div>
-            ) : filteredData.length === 0 ? (
+            ) : adjudicationData.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No prescriptions found matching your filters.
               </div>
             ) : (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => handleSort("prescribed_date")}
-                      >
-                        <div className="flex items-center">
-                          Date
-                          <SortIcon field="prescribed_date" />
-                        </div>
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => handleSort("patient_name")}
-                      >
-                        <div className="flex items-center">
-                          Patient
-                          <SortIcon field="patient_name" />
-                        </div>
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => handleSort("medication_name")}
-                      >
-                        <div className="flex items-center">
-                          Medication
-                          <SortIcon field="medication_name" />
-                        </div>
-                      </TableHead>
-                      <TableHead>Pharmacy</TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-muted/50 text-center"
-                        onClick={() => handleSort("fills_adjudicated")}
-                      >
-                        <div className="flex items-center justify-center">
-                          Fills
-                          <SortIcon field="fills_adjudicated" />
-                        </div>
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-muted/50 text-center"
-                        onClick={() => handleSort("fills_remaining")}
-                      >
-                        <div className="flex items-center justify-center">
-                          Remaining
-                          <SortIcon field="fills_remaining" />
-                        </div>
-                      </TableHead>
-                      <TableHead 
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => handleSort("adjudication_status")}
-                      >
-                        <div className="flex items-center">
-                          Status
-                          <SortIcon field="adjudication_status" />
-                        </div>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredData.map((row) => {
-                      const status = row.adjudication_status || "Never Filled";
-                      const colors = statusColors[status] || statusColors["Never Filled"];
-                      
-                      return (
-                        <TableRow 
-                          key={row.prescription_id}
+              <>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead 
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setSelectedRow(row)}
+                          onClick={() => handleSort("prescribed_date")}
                         >
-                          <TableCell className="font-medium">
-                            {row.prescribed_date ? format(new Date(row.prescribed_date), "MMM d, yyyy") : "-"}
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{row.patient_name || "Unknown"}</div>
-                              <div className="text-sm text-muted-foreground">MRN: {row.patient_mrn || "-"}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{row.medication_name || "-"}</div>
-                              <div className="text-sm text-muted-foreground">NDC: {row.ndc_code || "-"}</div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{row.pharmacy_name || "-"}</TableCell>
-                          <TableCell className="text-center font-medium">{row.fills_adjudicated ?? 0}</TableCell>
-                          <TableCell className="text-center font-medium">{row.fills_remaining ?? 0}</TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant="outline" 
-                              className={cn(colors.bg, colors.text, colors.border)}
-                            >
-                              {status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                          <div className="flex items-center">
+                            Date
+                            <SortIcon field="prescribed_date" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort("patient_name")}
+                        >
+                          <div className="flex items-center">
+                            Patient
+                            <SortIcon field="patient_name" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort("medication_name")}
+                        >
+                          <div className="flex items-center">
+                            Medication
+                            <SortIcon field="medication_name" />
+                          </div>
+                        </TableHead>
+                        <TableHead>Pharmacy</TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50 text-center"
+                          onClick={() => handleSort("fills_adjudicated")}
+                        >
+                          <div className="flex items-center justify-center">
+                            Fills
+                            <SortIcon field="fills_adjudicated" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50 text-center"
+                          onClick={() => handleSort("fills_remaining")}
+                        >
+                          <div className="flex items-center justify-center">
+                            Remaining
+                            <SortIcon field="fills_remaining" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort("adjudication_status")}
+                        >
+                          <div className="flex items-center">
+                            Status
+                            <SortIcon field="adjudication_status" />
+                          </div>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {adjudicationData.map((row) => {
+                        const status = row.adjudication_status || "Never Filled";
+                        const colors = statusColors[status] || statusColors["Never Filled"];
+                        
+                        return (
+                          <TableRow 
+                            key={row.prescription_id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setSelectedRow(row)}
+                          >
+                            <TableCell className="font-medium">
+                              {row.prescribed_date ? format(new Date(row.prescribed_date), "MMM d, yyyy") : "-"}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{row.patient_name || "Unknown"}</div>
+                                <div className="text-sm text-muted-foreground">MRN: {row.patient_mrn || "-"}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{row.medication_name || "-"}</div>
+                                <div className="text-sm text-muted-foreground">NDC: {row.ndc_code || "-"}</div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{row.pharmacy_name || "-"}</TableCell>
+                            <TableCell className="text-center font-medium">{row.fills_adjudicated ?? 0}</TableCell>
+                            <TableCell className="text-center font-medium">{row.fills_remaining ?? 0}</TableCell>
+                            <TableCell>
+                              <Badge 
+                                variant="outline" 
+                                className={cn(colors.bg, colors.text, colors.border)}
+                              >
+                                {status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()} prescriptions
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground px-2">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                    >
+                      Next
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages || totalPages === 0}
+                    >
+                      Last
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
