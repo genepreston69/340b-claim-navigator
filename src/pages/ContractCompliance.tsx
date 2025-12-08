@@ -316,7 +316,7 @@ export default function ContractCompliance() {
               Contract Compliance
             </h1>
             <p className="text-muted-foreground">
-              Identify uncontracted pharmacies and pharmacies with low 340B activity
+              Prescriptions written 60+ days ago that have not been adjudicated by contracted pharmacies
             </p>
           </div>
           <Button variant="outline" onClick={exportToCSV}>
