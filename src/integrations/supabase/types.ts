@@ -829,9 +829,9 @@ export type Database = {
       monthly_financial_summary: {
         Row: {
           avg_days_supply: number | null
+          benefit_340b: number | null
           gross_savings: number | null
           month: string | null
-          net_margin: number | null
           total_340b_cost: number | null
           total_claims: number | null
           total_dispensing_fees: number | null
@@ -857,9 +857,9 @@ export type Database = {
       monthly_pharmacy_summary: {
         Row: {
           avg_days_to_fill: number | null
+          benefit_340b: number | null
           gross_savings: number | null
           month: string | null
-          net_margin: number | null
           pharmacy_id: string | null
           pharmacy_name: string | null
           total_340b_cost: number | null
