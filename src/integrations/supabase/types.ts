@@ -758,7 +758,15 @@ export type Database = {
           unique_patients: number | null
           unique_prescribers: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_drug_id_fkey"
+            columns: ["drug_id"]
+            isOneToOne: false
+            referencedRelation: "drugs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       drug_pharmacy_comparison: {
         Row: {
