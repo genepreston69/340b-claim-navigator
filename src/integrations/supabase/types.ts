@@ -255,6 +255,60 @@ export type Database = {
           },
         ]
       }
+      contract_pharmacies: {
+        Row: {
+          address_1: string | null
+          address_2: string | null
+          address_3: string | null
+          city: string | null
+          contract_approval_date: string | null
+          contract_begin_date: string | null
+          contract_id: number | null
+          contract_term_date: string | null
+          created_at: string
+          id: string
+          pharmacy_id: number | null
+          pharmacy_name: string
+          state: string | null
+          updated_at: string
+          zip: string | null
+        }
+        Insert: {
+          address_1?: string | null
+          address_2?: string | null
+          address_3?: string | null
+          city?: string | null
+          contract_approval_date?: string | null
+          contract_begin_date?: string | null
+          contract_id?: number | null
+          contract_term_date?: string | null
+          created_at?: string
+          id?: string
+          pharmacy_id?: number | null
+          pharmacy_name: string
+          state?: string | null
+          updated_at?: string
+          zip?: string | null
+        }
+        Update: {
+          address_1?: string | null
+          address_2?: string | null
+          address_3?: string | null
+          city?: string | null
+          contract_approval_date?: string | null
+          contract_begin_date?: string | null
+          contract_id?: number | null
+          contract_term_date?: string | null
+          created_at?: string
+          id?: string
+          pharmacy_id?: number | null
+          pharmacy_name?: string
+          state?: string | null
+          updated_at?: string
+          zip?: string | null
+        }
+        Relationships: []
+      }
       covered_entities: {
         Row: {
           created_at: string | null
