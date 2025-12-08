@@ -702,6 +702,59 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_financial_summary: {
+        Row: {
+          avg_days_supply: number | null
+          gross_savings: number | null
+          month: string | null
+          net_margin: number | null
+          total_340b_cost: number | null
+          total_claims: number | null
+          total_dispensing_fees: number | null
+          total_patient_pay: number | null
+          total_payments: number | null
+          total_retail_cost: number | null
+          total_third_party_payment: number | null
+        }
+        Relationships: []
+      }
+      monthly_payer_summary: {
+        Row: {
+          avg_340b_cost: number | null
+          avg_payment: number | null
+          claim_count: number | null
+          month: string | null
+          payer_type: string | null
+          total_340b_cost: number | null
+          total_payments: number | null
+        }
+        Relationships: []
+      }
+      monthly_pharmacy_summary: {
+        Row: {
+          avg_days_to_fill: number | null
+          gross_savings: number | null
+          month: string | null
+          net_margin: number | null
+          pharmacy_id: string | null
+          pharmacy_name: string | null
+          total_340b_cost: number | null
+          total_claims: number | null
+          total_patient_pay: number | null
+          total_payments: number | null
+          total_retail_cost: number | null
+          total_third_party_payment: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_all_users_with_roles: {
