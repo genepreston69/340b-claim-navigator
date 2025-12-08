@@ -240,6 +240,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
             foreignKeyName: "claims_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
@@ -687,6 +694,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
             foreignKeyName: "prescriptions_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
@@ -859,6 +873,13 @@ export type Database = {
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
         ]
       }
       monthly_adherence_trends: {
@@ -930,19 +951,20 @@ export type Database = {
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
         ]
       }
       pharmacy_contract_compliance: {
         Row: {
-          capture_rate_pct: number | null
           chain_pharmacy: string | null
           contract_status: string | null
-          days_since_last_claim: number | null
-          estimated_lost_revenue: number | null
-          first_claim_date: string | null
           first_prescription_date: string | null
-          gross_savings: number | null
-          last_claim_date: string | null
           last_prescription_date: string | null
           nabp_number: number | null
           npi_number: number | null
@@ -950,24 +972,9 @@ export type Database = {
           pharmacy_id: string | null
           pharmacy_name: string | null
           prescribers_writing: number | null
-          prescriptions_filled: number | null
           prescriptions_written: number | null
-          total_340b_cost: number | null
-          total_claims: number | null
-          total_payments: number | null
-          total_retail_cost: number | null
-          unique_drugs_dispensed: number | null
-          unique_prescribers_served: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "prescriptions_pharmacy_id_fkey"
-            columns: ["pharmacy_id"]
-            isOneToOne: false
-            referencedRelation: "pharmacies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       physician_capture_rates: {
         Row: {
@@ -1045,6 +1052,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
           },
           {
             foreignKeyName: "claims_prescriber_id_fkey"
