@@ -14,6 +14,240 @@ export type Database = {
   }
   public: {
     Tables: {
+      claims: {
+        Row: {
+          billing_model: string | null
+          bin: number | null
+          ce_receivable: number | null
+          chain_pharmacy: string | null
+          claim_captured_date: string | null
+          claim_date: string | null
+          claim_id: number | null
+          claim_sub_type: string | null
+          claim_type: string | null
+          comments: string | null
+          covered_entity_id: string | null
+          covered_entity_name: string | null
+          created_at: string | null
+          date_of_birth: string | null
+          date_rx_written: string
+          days_supply: number | null
+          dispensing_fee: number | null
+          drug_cost_340b: number | null
+          drug_id: string | null
+          drug_indicator: string | null
+          drug_name: string | null
+          fill_date: string
+          first_name: string | null
+          gender: string | null
+          id: string
+          last_name: string | null
+          manufacturer_name: string | null
+          medical_record_number: string | null
+          ndc: number | null
+          opaid: string | null
+          other_coverage_code: string | null
+          package_size: number | null
+          patient_id: string | null
+          patient_id_external: string | null
+          patient_pay: number | null
+          pcn: string | null
+          pharmacy_id: string | null
+          pharmacy_nabp_npi: number | null
+          pharmacy_name: string | null
+          plan_group: string | null
+          prescriber_id: string | null
+          prescriber_name: string | null
+          prescriber_npi_dea: string | null
+          prescription_number: number
+          profit_or_loss: number | null
+          qty_dispensed: number | null
+          reason: string | null
+          refill_number: number
+          replenishment_status: string | null
+          retail_drug_cost: number | null
+          secondary_bin: number | null
+          secondary_group: string | null
+          secondary_pcn: string | null
+          sub_reason: string | null
+          submission_clarification_code: string | null
+          third_party_payment: number | null
+          total_claim_cost: number | null
+          total_payment: number | null
+          transaction_code: string | null
+          trued_up_cost: number | null
+          trued_up_date: string | null
+          trued_up_units: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          billing_model?: string | null
+          bin?: number | null
+          ce_receivable?: number | null
+          chain_pharmacy?: string | null
+          claim_captured_date?: string | null
+          claim_date?: string | null
+          claim_id?: number | null
+          claim_sub_type?: string | null
+          claim_type?: string | null
+          comments?: string | null
+          covered_entity_id?: string | null
+          covered_entity_name?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          date_rx_written: string
+          days_supply?: number | null
+          dispensing_fee?: number | null
+          drug_cost_340b?: number | null
+          drug_id?: string | null
+          drug_indicator?: string | null
+          drug_name?: string | null
+          fill_date: string
+          first_name?: string | null
+          gender?: string | null
+          id?: string
+          last_name?: string | null
+          manufacturer_name?: string | null
+          medical_record_number?: string | null
+          ndc?: number | null
+          opaid?: string | null
+          other_coverage_code?: string | null
+          package_size?: number | null
+          patient_id?: string | null
+          patient_id_external?: string | null
+          patient_pay?: number | null
+          pcn?: string | null
+          pharmacy_id?: string | null
+          pharmacy_nabp_npi?: number | null
+          pharmacy_name?: string | null
+          plan_group?: string | null
+          prescriber_id?: string | null
+          prescriber_name?: string | null
+          prescriber_npi_dea?: string | null
+          prescription_number: number
+          profit_or_loss?: number | null
+          qty_dispensed?: number | null
+          reason?: string | null
+          refill_number: number
+          replenishment_status?: string | null
+          retail_drug_cost?: number | null
+          secondary_bin?: number | null
+          secondary_group?: string | null
+          secondary_pcn?: string | null
+          sub_reason?: string | null
+          submission_clarification_code?: string | null
+          third_party_payment?: number | null
+          total_claim_cost?: number | null
+          total_payment?: number | null
+          transaction_code?: string | null
+          trued_up_cost?: number | null
+          trued_up_date?: string | null
+          trued_up_units?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          billing_model?: string | null
+          bin?: number | null
+          ce_receivable?: number | null
+          chain_pharmacy?: string | null
+          claim_captured_date?: string | null
+          claim_date?: string | null
+          claim_id?: number | null
+          claim_sub_type?: string | null
+          claim_type?: string | null
+          comments?: string | null
+          covered_entity_id?: string | null
+          covered_entity_name?: string | null
+          created_at?: string | null
+          date_of_birth?: string | null
+          date_rx_written?: string
+          days_supply?: number | null
+          dispensing_fee?: number | null
+          drug_cost_340b?: number | null
+          drug_id?: string | null
+          drug_indicator?: string | null
+          drug_name?: string | null
+          fill_date?: string
+          first_name?: string | null
+          gender?: string | null
+          id?: string
+          last_name?: string | null
+          manufacturer_name?: string | null
+          medical_record_number?: string | null
+          ndc?: number | null
+          opaid?: string | null
+          other_coverage_code?: string | null
+          package_size?: number | null
+          patient_id?: string | null
+          patient_id_external?: string | null
+          patient_pay?: number | null
+          pcn?: string | null
+          pharmacy_id?: string | null
+          pharmacy_nabp_npi?: number | null
+          pharmacy_name?: string | null
+          plan_group?: string | null
+          prescriber_id?: string | null
+          prescriber_name?: string | null
+          prescriber_npi_dea?: string | null
+          prescription_number?: number
+          profit_or_loss?: number | null
+          qty_dispensed?: number | null
+          reason?: string | null
+          refill_number?: number
+          replenishment_status?: string | null
+          retail_drug_cost?: number | null
+          secondary_bin?: number | null
+          secondary_group?: string | null
+          secondary_pcn?: string | null
+          sub_reason?: string | null
+          submission_clarification_code?: string | null
+          third_party_payment?: number | null
+          total_claim_cost?: number | null
+          total_payment?: number | null
+          transaction_code?: string | null
+          trued_up_cost?: number | null
+          trued_up_date?: string | null
+          trued_up_units?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_covered_entity_id_fkey"
+            columns: ["covered_entity_id"]
+            isOneToOne: false
+            referencedRelation: "covered_entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_drug_id_fkey"
+            columns: ["drug_id"]
+            isOneToOne: false
+            referencedRelation: "drugs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_prescriber_id_fkey"
+            columns: ["prescriber_id"]
+            isOneToOne: false
+            referencedRelation: "prescribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       covered_entities: {
         Row: {
           created_at: string | null
@@ -264,6 +498,162 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      prescriptions: {
+        Row: {
+          covered_entity_id: string | null
+          created_at: string | null
+          days_supply: number | null
+          dispense_quantity: number | null
+          dispense_quantity_unit: string | null
+          drug_id: string | null
+          encounter_end_date: string | null
+          encounter_fin: number | null
+          encounter_start_date: string | null
+          frequency: string | null
+          id: string
+          location_id: string | null
+          medication_name: string | null
+          ndc_code: string | null
+          organization_identifier: string | null
+          patient_id: string | null
+          patient_mrn: string | null
+          pharmacy_id: string | null
+          prescribed_date: string
+          prescriber_id: string | null
+          prescription_identifier: number | null
+          primary_insurance_id: string | null
+          primary_subscriber_number: string | null
+          refills_authorized: number | null
+          secondary_insurance_id: string | null
+          secondary_subscriber_number: string | null
+          source_file: string | null
+          status: string | null
+          transmission_method: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          covered_entity_id?: string | null
+          created_at?: string | null
+          days_supply?: number | null
+          dispense_quantity?: number | null
+          dispense_quantity_unit?: string | null
+          drug_id?: string | null
+          encounter_end_date?: string | null
+          encounter_fin?: number | null
+          encounter_start_date?: string | null
+          frequency?: string | null
+          id?: string
+          location_id?: string | null
+          medication_name?: string | null
+          ndc_code?: string | null
+          organization_identifier?: string | null
+          patient_id?: string | null
+          patient_mrn?: string | null
+          pharmacy_id?: string | null
+          prescribed_date: string
+          prescriber_id?: string | null
+          prescription_identifier?: number | null
+          primary_insurance_id?: string | null
+          primary_subscriber_number?: string | null
+          refills_authorized?: number | null
+          secondary_insurance_id?: string | null
+          secondary_subscriber_number?: string | null
+          source_file?: string | null
+          status?: string | null
+          transmission_method?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          covered_entity_id?: string | null
+          created_at?: string | null
+          days_supply?: number | null
+          dispense_quantity?: number | null
+          dispense_quantity_unit?: string | null
+          drug_id?: string | null
+          encounter_end_date?: string | null
+          encounter_fin?: number | null
+          encounter_start_date?: string | null
+          frequency?: string | null
+          id?: string
+          location_id?: string | null
+          medication_name?: string | null
+          ndc_code?: string | null
+          organization_identifier?: string | null
+          patient_id?: string | null
+          patient_mrn?: string | null
+          pharmacy_id?: string | null
+          prescribed_date?: string
+          prescriber_id?: string | null
+          prescription_identifier?: number | null
+          primary_insurance_id?: string | null
+          primary_subscriber_number?: string | null
+          refills_authorized?: number | null
+          secondary_insurance_id?: string | null
+          secondary_subscriber_number?: string | null
+          source_file?: string | null
+          status?: string | null
+          transmission_method?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_covered_entity_id_fkey"
+            columns: ["covered_entity_id"]
+            isOneToOne: false
+            referencedRelation: "covered_entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_drug_id_fkey"
+            columns: ["drug_id"]
+            isOneToOne: false
+            referencedRelation: "drugs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_prescriber_id_fkey"
+            columns: ["prescriber_id"]
+            isOneToOne: false
+            referencedRelation: "prescribers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_primary_insurance_id_fkey"
+            columns: ["primary_insurance_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_secondary_insurance_id_fkey"
+            columns: ["secondary_insurance_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
