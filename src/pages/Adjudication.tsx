@@ -1,6 +1,17 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Scale, Filter, ArrowUpDown, ArrowUp, ArrowDown, Search, X } from "lucide-react";
+import { 
+  Filter, 
+  ArrowUpDown, 
+  ArrowUp, 
+  ArrowDown, 
+  Search, 
+  AlertCircle, 
+  Clock, 
+  CheckCircle2, 
+  FileText,
+  DollarSign 
+} from "lucide-react";
 import { format } from "date-fns";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -137,16 +148,57 @@ const Adjudication = () => {
     return filtered;
   }, [adjudicationData, statusFilter, pharmacyFilter, searchQuery, dateFrom, dateTo, sortField, sortDirection]);
 
-  // Summary stats
+  // Summary stats based on filtered data (respecting date range)
   const stats = useMemo(() => {
-    if (!adjudicationData) return { total: 0, neverFilled: 0, partial: 0, complete: 0 };
+    // Use filteredData to respect active filters for stats
+    const dataForStats = filteredData;
+    
+    if (!dataForStats || dataForStats.length === 0) {
+      return { 
+        total: 0, 
+        neverFilled: 0, 
+        partial: 0, 
+        complete: 0,
+        neverFilledPct: 0,
+        partialPct: 0,
+        completePct: 0,
+        pendingRevenue: 0
+      };
+    }
+
+    const total = dataForStats.length;
+    const neverFilled = dataForStats.filter(d => d.adjudication_status === "Never Filled").length;
+    const partial = dataForStats.filter(d => d.adjudication_status === "Partial").length;
+    const complete = dataForStats.filter(d => d.adjudication_status === "Complete").length;
+
+    // Calculate pending revenue (estimated value of unfilled scripts)
+    // For Never Filled: use total_payments from Complete scripts as average
+    // For Partial: multiply remaining fills by average payment per fill
+    const completeScripts = dataForStats.filter(d => d.adjudication_status === "Complete");
+    const avgPaymentPerFill = completeScripts.length > 0 
+      ? completeScripts.reduce((sum, d) => sum + (d.total_payments || 0), 0) / 
+        completeScripts.reduce((sum, d) => sum + (d.fills_adjudicated || 1), 0)
+      : 50; // Default estimate if no complete scripts
+
+    const neverFilledRevenue = dataForStats
+      .filter(d => d.adjudication_status === "Never Filled")
+      .reduce((sum, d) => sum + ((d.refills_authorized ?? 0) + 1) * avgPaymentPerFill, 0);
+
+    const partialRevenue = dataForStats
+      .filter(d => d.adjudication_status === "Partial")
+      .reduce((sum, d) => sum + (d.fills_remaining ?? 0) * avgPaymentPerFill, 0);
+
     return {
-      total: adjudicationData.length,
-      neverFilled: adjudicationData.filter(d => d.adjudication_status === "Never Filled").length,
-      partial: adjudicationData.filter(d => d.adjudication_status === "Partial").length,
-      complete: adjudicationData.filter(d => d.adjudication_status === "Complete").length,
+      total,
+      neverFilled,
+      partial,
+      complete,
+      neverFilledPct: total > 0 ? Math.round((neverFilled / total) * 100) : 0,
+      partialPct: total > 0 ? Math.round((partial / total) * 100) : 0,
+      completePct: total > 0 ? Math.round((complete / total) * 100) : 0,
+      pendingRevenue: neverFilledRevenue + partialRevenue
     };
-  }, [adjudicationData]);
+  }, [filteredData]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -188,53 +240,108 @@ const Adjudication = () => {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("all")}>
+        <div className="grid gap-4 md:grid-cols-5">
+          {/* Total Scripts */}
+          <Card 
+            className={cn(
+              "cursor-pointer hover:shadow-md transition-all",
+              statusFilter === "all" && "ring-2 ring-primary"
+            )} 
+            onClick={() => setStatusFilter("all")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Prescriptions</p>
+                  <p className="text-sm text-muted-foreground">Total Scripts</p>
                   <p className="text-2xl font-bold text-foreground">{stats.total}</p>
+                  <p className="text-xs text-muted-foreground mt-1">In selected filters</p>
                 </div>
-                <Scale className="h-8 w-8 text-primary opacity-80" />
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-primary" />
+                </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("Never Filled")}>
+
+          {/* Never Filled */}
+          <Card 
+            className={cn(
+              "cursor-pointer hover:shadow-md transition-all border-l-4 border-l-destructive",
+              statusFilter === "Never Filled" && "ring-2 ring-destructive"
+            )} 
+            onClick={() => setStatusFilter("Never Filled")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Never Filled</p>
                   <p className="text-2xl font-bold text-destructive">{stats.neverFilled}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stats.neverFilledPct}% of total</p>
                 </div>
-                <div className="h-8 w-8 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <X className="h-5 w-5 text-destructive" />
+                <div className="h-10 w-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <AlertCircle className="h-5 w-5 text-destructive" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("Partial")}>
+
+          {/* Partial Fills */}
+          <Card 
+            className={cn(
+              "cursor-pointer hover:shadow-md transition-all border-l-4 border-l-warning",
+              statusFilter === "Partial" && "ring-2 ring-warning"
+            )} 
+            onClick={() => setStatusFilter("Partial")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Partial</p>
+                  <p className="text-sm text-muted-foreground">Partial Fills</p>
                   <p className="text-2xl font-bold text-warning">{stats.partial}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stats.partialPct}% of total</p>
                 </div>
-                <div className="h-8 w-8 rounded-full bg-warning/10 flex items-center justify-center">
-                  <Scale className="h-5 w-5 text-warning" />
+                <div className="h-10 w-10 rounded-full bg-warning/10 flex items-center justify-center">
+                  <Clock className="h-5 w-5 text-warning" />
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter("Complete")}>
+
+          {/* Complete */}
+          <Card 
+            className={cn(
+              "cursor-pointer hover:shadow-md transition-all border-l-4 border-l-success",
+              statusFilter === "Complete" && "ring-2 ring-success"
+            )} 
+            onClick={() => setStatusFilter("Complete")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Complete</p>
                   <p className="text-2xl font-bold text-success">{stats.complete}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stats.completePct}% of total</p>
                 </div>
-                <div className="h-8 w-8 rounded-full bg-success/10 flex items-center justify-center">
-                  <Scale className="h-5 w-5 text-success" />
+                <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-5 w-5 text-success" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Pending Revenue */}
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Pending Revenue</p>
+                  <p className="text-2xl font-bold text-primary">
+                    ${stats.pendingRevenue.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Est. uncaptured savings</p>
+                </div>
+                <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <DollarSign className="h-5 w-5 text-primary" />
                 </div>
               </div>
             </CardContent>
