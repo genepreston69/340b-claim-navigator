@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -13,7 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-
+import { parseScriptsFile, ParseProgress } from "@/utils/scriptsParser";
+import { useToast } from "@/hooks/use-toast";
 interface ImportHistoryItem {
   id: string;
   importDate: string;
@@ -106,6 +108,10 @@ interface FileUploadSectionProps {
   accept: string;
   icon: React.ReactNode;
   buttonText: string;
+  isProcessing: boolean;
+  progress: ParseProgress | null;
+  selectedFile: File | null;
+  onFileSelect: (file: File | null) => void;
   onProcess: () => void;
 }
 
@@ -116,14 +122,17 @@ const FileUploadSection = ({
   accept,
   icon,
   buttonText,
+  isProcessing,
+  progress,
+  selectedFile,
+  onFileSelect,
   onProcess,
 }: FileUploadSectionProps) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      onFileSelect(e.target.files[0]);
     }
   };
 
@@ -141,7 +150,7 @@ const FileUploadSection = ({
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
+      onFileSelect(e.dataTransfer.files[0]);
     }
   };
 
@@ -164,7 +173,8 @@ const FileUploadSection = ({
             "relative rounded-lg border-2 border-dashed p-6 transition-all duration-200",
             isDragOver
               ? "border-primary bg-primary/5"
-              : "border-border hover:border-primary/50 hover:bg-muted/50"
+              : "border-border hover:border-primary/50 hover:bg-muted/50",
+            isProcessing && "pointer-events-none opacity-50"
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -175,6 +185,7 @@ const FileUploadSection = ({
             accept={accept}
             onChange={handleFileChange}
             className="absolute inset-0 cursor-pointer opacity-0"
+            disabled={isProcessing}
           />
           <div className="flex flex-col items-center gap-3 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -189,7 +200,7 @@ const FileUploadSection = ({
           </div>
         </div>
 
-        {selectedFile && (
+        {selectedFile && !isProcessing && (
           <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-background">
               {accept.includes("xlsx") ? (
@@ -208,12 +219,38 @@ const FileUploadSection = ({
           </div>
         )}
 
+        {/* Progress indicator */}
+        {isProcessing && progress && (
+          <div className="space-y-3 rounded-lg bg-muted/50 p-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">{progress.message}</p>
+                {progress.total > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {progress.current.toLocaleString()} of {progress.total.toLocaleString()} rows
+                  </p>
+                )}
+              </div>
+              <span className="text-sm font-medium text-primary">{progress.percentage}%</span>
+            </div>
+            <Progress value={progress.percentage} className="h-2" />
+          </div>
+        )}
+
         <Button
           onClick={onProcess}
-          disabled={!selectedFile}
+          disabled={!selectedFile || isProcessing}
           className="w-full"
         >
-          {buttonText}
+          {isProcessing ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            buttonText
+          )}
         </Button>
       </CardContent>
     </Card>
@@ -221,11 +258,45 @@ const FileUploadSection = ({
 };
 
 const DataImport = () => {
-  const handleProcessScripts = () => {
-    console.log("Processing scripts...");
+  const { toast } = useToast();
+  const [scriptsFile, setScriptsFile] = useState<File | null>(null);
+  const [claimsFile, setClaimsFile] = useState<File | null>(null);
+  const [scriptsProgress, setScriptsProgress] = useState<ParseProgress | null>(null);
+  const [claimsProgress, setClaimsProgress] = useState<ParseProgress | null>(null);
+  const [isProcessingScripts, setIsProcessingScripts] = useState(false);
+  const [isProcessingClaims, setIsProcessingClaims] = useState(false);
+
+  const handleProcessScripts = async () => {
+    if (!scriptsFile) return;
+
+    setIsProcessingScripts(true);
+    setScriptsProgress(null);
+
+    try {
+      const prescriptions = await parseScriptsFile(scriptsFile, setScriptsProgress);
+      
+      toast({
+        title: "Scripts Parsed Successfully",
+        description: `Parsed ${prescriptions.length.toLocaleString()} prescription records from ${scriptsFile.name}`,
+      });
+
+      console.log("Parsed prescriptions:", prescriptions);
+      // TODO: Save to database
+      
+      setScriptsFile(null);
+    } catch (error) {
+      toast({
+        title: "Error Parsing Scripts",
+        description: error instanceof Error ? error.message : "Failed to parse the Excel file",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingScripts(false);
+    }
   };
 
   const handleProcessClaims = () => {
+    // TODO: Implement claims parsing
     console.log("Processing claims...");
   };
 
@@ -249,6 +320,10 @@ const DataImport = () => {
             accept=".xlsx,.xls"
             icon={<FileSpreadsheet className="h-5 w-5" />}
             buttonText="Process Scripts"
+            isProcessing={isProcessingScripts}
+            progress={scriptsProgress}
+            selectedFile={scriptsFile}
+            onFileSelect={setScriptsFile}
             onProcess={handleProcessScripts}
           />
 
@@ -259,6 +334,10 @@ const DataImport = () => {
             accept=".csv"
             icon={<FileText className="h-5 w-5" />}
             buttonText="Process Claims"
+            isProcessing={isProcessingClaims}
+            progress={claimsProgress}
+            selectedFile={claimsFile}
+            onFileSelect={setClaimsFile}
             onProcess={handleProcessClaims}
           />
         </div>
