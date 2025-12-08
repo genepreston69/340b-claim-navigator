@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Receipt, Scale, Settings, Activity, Upload, BarChart3 } from "lucide-react";
+import { LayoutDashboard, FileText, Receipt, Scale, Settings, Activity, Upload, BarChart3, Users } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -21,6 +21,7 @@ const navigationItems = [
   { title: "Adjudication", url: "/adjudication", icon: Scale, adminOnly: true },
   { title: "Reports", url: "/reports", icon: BarChart3, adminOnly: true },
   { title: "Data Import", url: "/data-import", icon: Upload, adminOnly: true },
+  { title: "Users", url: "/users", icon: Users, adminOnly: true },
   { title: "Settings", url: "/settings", icon: Settings, adminOnly: true },
 ];
 
