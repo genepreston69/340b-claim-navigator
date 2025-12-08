@@ -699,6 +699,18 @@ export type Database = {
         }
         Relationships: []
       }
+      adherence_metrics_summary: {
+        Row: {
+          avg_days_to_fill: number | null
+          avg_fill_rate: number | null
+          fully_adherent: number | null
+          never_filled: number | null
+          partially_adherent: number | null
+          total_payments: number | null
+          total_prescriptions: number | null
+        }
+        Relationships: []
+      }
       adjudication_filter_options: {
         Row: {
           filter_type: string | null
