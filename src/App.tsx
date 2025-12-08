@@ -9,6 +9,7 @@ import Claims from "./pages/Claims";
 import Adjudication from "./pages/Adjudication";
 import Settings from "./pages/Settings";
 import DataImport from "./pages/DataImport";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
           <Route path="/claims" element={<Claims />} />
           <Route path="/adjudication" element={<Adjudication />} />
           <Route path="/data-import" element={<DataImport />} />
+          <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

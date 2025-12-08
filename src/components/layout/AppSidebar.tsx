@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Receipt, Scale, Settings, Activity, Upload } from "lucide-react";
+import { LayoutDashboard, FileText, Receipt, Scale, Settings, Activity, Upload, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -18,6 +18,7 @@ const navigationItems = [
   { title: "Scripts", url: "/scripts", icon: FileText },
   { title: "Claims", url: "/claims", icon: Receipt },
   { title: "Adjudication", url: "/adjudication", icon: Scale },
+  { title: "Reports", url: "/reports", icon: BarChart3 },
   { title: "Data Import", url: "/data-import", icon: Upload },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
