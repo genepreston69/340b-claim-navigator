@@ -1,4 +1,8 @@
-import { Plus, Search, Filter, Download } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, Search, Filter, Download, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { format } from "date-fns";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,65 +16,105 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
 
-const mockClaims = [
-  {
-    id: "CL-2024-1001",
-    scriptId: "RX-2024-001",
-    payer: "CVS Caremark",
-    amount: 245.67,
-    submittedDate: "2024-01-16",
-    status: "adjudicated",
-  },
-  {
-    id: "CL-2024-1002",
-    scriptId: "RX-2024-002",
-    payer: "Express Scripts",
-    amount: 89.99,
-    submittedDate: "2024-01-16",
-    status: "pending",
-  },
-  {
-    id: "CL-2024-1003",
-    scriptId: "RX-2024-003",
-    payer: "OptumRx",
-    amount: 156.32,
-    submittedDate: "2024-01-15",
-    status: "adjudicated",
-  },
-  {
-    id: "CL-2024-1004",
-    scriptId: "RX-2024-004",
-    payer: "Cigna",
-    amount: 78.45,
-    submittedDate: "2024-01-15",
-    status: "rejected",
-  },
-  {
-    id: "CL-2024-1005",
-    scriptId: "RX-2024-005",
-    payer: "Humana",
-    amount: 312.00,
-    submittedDate: "2024-01-14",
-    status: "under_review",
-  },
-];
-
-const statusStyles = {
-  adjudicated: "bg-success/10 text-success border-success/20",
-  pending: "bg-warning/10 text-warning border-warning/20",
-  rejected: "bg-destructive/10 text-destructive border-destructive/20",
-  under_review: "bg-info/10 text-info border-info/20",
-};
-
-const statusLabels = {
-  adjudicated: "Adjudicated",
-  pending: "Pending",
-  rejected: "Rejected",
-  under_review: "Under Review",
-};
+type Claim = Tables<"claims">;
+type SortField = "fill_date" | "claim_date" | "drug_name" | "total_payment" | "prescription_number";
+type SortDirection = "asc" | "desc";
 
 const Claims = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<SortField>("fill_date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  // Get prescription filter from URL
+  const rxFilter = searchParams.get("rx");
+
+  // Fetch claims data
+  const { data: claims, isLoading, error } = useQuery({
+    queryKey: ["claims", rxFilter],
+    queryFn: async () => {
+      let query = supabase
+        .from("claims")
+        .select("*")
+        .order("fill_date", { ascending: false });
+      
+      if (rxFilter) {
+        query = query.eq("prescription_number", parseInt(rxFilter));
+      }
+      
+      const { data, error } = await query.limit(500);
+      
+      if (error) throw error;
+      return data as Claim[];
+    },
+  });
+
+  // Filter and sort data
+  const filteredData = useMemo(() => {
+    if (!claims) return [];
+
+    let filtered = claims;
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(c => 
+        c.drug_name?.toLowerCase().includes(query) ||
+        c.patient_id_external?.toLowerCase().includes(query) ||
+        c.first_name?.toLowerCase().includes(query) ||
+        c.last_name?.toLowerCase().includes(query) ||
+        c.pharmacy_name?.toLowerCase().includes(query) ||
+        c.prescription_number?.toString().includes(query) ||
+        c.claim_id?.toString().includes(query)
+      );
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      if (aVal === null || aVal === undefined) return 1;
+      if (bVal === null || bVal === undefined) return -1;
+
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        return sortDirection === "asc" 
+          ? aVal.localeCompare(bVal)
+          : bVal.localeCompare(aVal);
+      }
+
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [claims, searchQuery, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-4 w-4 ml-1" />;
+    return sortDirection === "asc" 
+      ? <ArrowUp className="h-4 w-4 ml-1" />
+      : <ArrowDown className="h-4 w-4 ml-1" />;
+  };
+
+  const clearRxFilter = () => {
+    searchParams.delete("rx");
+    setSearchParams(searchParams);
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6 animate-fade-in">
@@ -88,6 +132,24 @@ const Claims = () => {
           </Button>
         </div>
 
+        {/* Active Filter Badge */}
+        {rxFilter && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Filtered by:</span>
+            <Badge variant="secondary" className="gap-1 pr-1">
+              Rx #{rxFilter}
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-4 w-4 p-0 hover:bg-transparent"
+                onClick={clearRxFilter}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </Badge>
+          </div>
+        )}
+
         {/* Filters */}
         <Card>
           <CardContent className="p-4">
@@ -95,8 +157,10 @@ const Claims = () => {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search by claim ID, script ID, or payer..."
+                  placeholder="Search by claim ID, Rx #, drug, patient, or pharmacy..."
                   className="pl-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
               <div className="flex gap-2">
@@ -116,40 +180,131 @@ const Claims = () => {
         {/* Claims Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Claims</CardTitle>
+            <CardTitle>
+              {rxFilter ? `Claims for Rx #${rxFilter}` : "Recent Claims"} ({filteredData.length})
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Claim ID</TableHead>
-                  <TableHead>Script ID</TableHead>
-                  <TableHead>Payer</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Submitted</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {mockClaims.map((claim) => (
-                  <TableRow key={claim.id} className="cursor-pointer hover:bg-muted/50">
-                    <TableCell className="font-medium">{claim.id}</TableCell>
-                    <TableCell className="font-mono text-sm">{claim.scriptId}</TableCell>
-                    <TableCell>{claim.payer}</TableCell>
-                    <TableCell>${claim.amount.toFixed(2)}</TableCell>
-                    <TableCell>{claim.submittedDate}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={statusStyles[claim.status as keyof typeof statusStyles]}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : error ? (
+              <div className="text-center py-8 text-destructive">
+                Error loading claims. Please try again.
+              </div>
+            ) : filteredData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No claims found.
+              </div>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Claim ID</TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort("prescription_number")}
                       >
-                        {statusLabels[claim.status as keyof typeof statusLabels]}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                        <div className="flex items-center">
+                          Rx #
+                          <SortIcon field="prescription_number" />
+                        </div>
+                      </TableHead>
+                      <TableHead>Refill</TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort("fill_date")}
+                      >
+                        <div className="flex items-center">
+                          Fill Date
+                          <SortIcon field="fill_date" />
+                        </div>
+                      </TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => handleSort("drug_name")}
+                      >
+                        <div className="flex items-center">
+                          Drug
+                          <SortIcon field="drug_name" />
+                        </div>
+                      </TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Pharmacy</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                      <TableHead className="text-right">340B Cost</TableHead>
+                      <TableHead 
+                        className="cursor-pointer hover:bg-muted/50 text-right"
+                        onClick={() => handleSort("total_payment")}
+                      >
+                        <div className="flex items-center justify-end">
+                          Payment
+                          <SortIcon field="total_payment" />
+                        </div>
+                      </TableHead>
+                      <TableHead>Payer</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredData.map((claim) => (
+                      <TableRow key={claim.id} className="hover:bg-muted/50">
+                        <TableCell className="font-mono text-sm">
+                          {claim.claim_id || "-"}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {claim.prescription_number || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-muted">
+                            {claim.refill_number === 0 ? "Original" : `#${claim.refill_number}`}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {claim.fill_date ? format(new Date(claim.fill_date), "MMM d, yyyy") : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">{claim.drug_name || "-"}</div>
+                            <div className="text-xs text-muted-foreground">
+                              NDC: {claim.ndc || "-"}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">
+                              {claim.first_name && claim.last_name 
+                                ? `${claim.first_name} ${claim.last_name}` 
+                                : "-"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              MRN: {claim.medical_record_number || "-"}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-[150px] truncate">
+                          {claim.pharmacy_name || "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {claim.qty_dispensed || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          ${(claim.drug_cost_340b || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-success">
+                          ${(claim.total_payment || 0).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="max-w-[120px] truncate">
+                          {claim.reason || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
