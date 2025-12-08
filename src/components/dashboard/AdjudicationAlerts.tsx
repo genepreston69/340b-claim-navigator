@@ -61,7 +61,7 @@ export function AdjudicationAlerts({ alerts, isLoading }: AdjudicationAlertsProp
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {alert.patient_name || "Unknown"} • Rx #{alert.prescription_identifier || "-"}
+                      Rx #{alert.prescription_identifier || "-"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Prescribed: {alert.prescribed_date ? format(new Date(alert.prescribed_date), "MMM d, yyyy") : "-"}
