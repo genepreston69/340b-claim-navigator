@@ -15,6 +15,10 @@ import Reports from "./pages/Reports";
 import UserManagement from "./pages/UserManagement";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import PrescriptionAdherence from "./pages/PrescriptionAdherence";
+import PhysicianCaptureRates from "./pages/PhysicianCaptureRates";
+import DrugPharmacyComparison from "./pages/DrugPharmacyComparison";
+import ContractCompliance from "./pages/ContractCompliance";
 
 const queryClient = new QueryClient();
 
@@ -72,6 +76,38 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <Reports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/prescription-adherence"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <PrescriptionAdherence />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/physician-capture-rates"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <PhysicianCaptureRates />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/drug-pharmacy-comparison"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DrugPharmacyComparison />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/contract-compliance"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <ContractCompliance />
                 </ProtectedRoute>
               }
             />
