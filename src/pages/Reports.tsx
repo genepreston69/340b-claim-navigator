@@ -1,4 +1,3 @@
-import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -23,32 +22,45 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { format, parseISO, startOfMonth, differenceInDays } from "date-fns";
+import { format, parseISO } from "date-fns";
 
-interface MonthlySavings {
+interface MonthlyFinancialSummary {
   month: string;
-  totalClaims: number;
-  total340BCost: number;
-  totalRetailCost: number;
-  grossSavings: number;
-  totalPayments: number;
-  netMargin: number;
+  total_claims: number;
+  total_340b_cost: number;
+  total_retail_cost: number;
+  gross_savings: number;
+  total_payments: number;
+  net_margin: number;
+  total_patient_pay: number;
+  total_third_party_payment: number;
+  total_dispensing_fees: number;
+  avg_days_supply: number;
 }
 
-interface PharmacyPerformance {
-  pharmacyName: string;
-  totalClaims: number;
-  total340BCost: number;
-  avgDaysToFill: number;
-  captureRate: number;
+interface MonthlyPharmacySummary {
+  month: string;
+  pharmacy_id: string | null;
+  pharmacy_name: string | null;
+  total_claims: number;
+  total_340b_cost: number;
+  total_retail_cost: number;
+  gross_savings: number;
+  total_payments: number;
+  net_margin: number;
+  total_patient_pay: number;
+  total_third_party_payment: number;
+  avg_days_to_fill: number;
 }
 
-interface PayerMix {
-  payerType: string;
-  claimCount: number;
-  percentOfTotal: number;
-  avgPayment: number;
-  avg340BCost: number;
+interface MonthlyPayerSummary {
+  month: string;
+  payer_type: string;
+  claim_count: number;
+  total_340b_cost: number;
+  total_payments: number;
+  avg_payment: number;
+  avg_340b_cost: number;
 }
 
 const formatCurrency = (value: number) => {
@@ -63,174 +75,132 @@ const formatPercent = (value: number) => {
   return `${value.toFixed(1)}%`;
 };
 
+const formatMonth = (dateStr: string) => {
+  try {
+    return format(parseISO(dateStr), "MMM yyyy");
+  } catch {
+    return dateStr;
+  }
+};
+
 export default function Reports() {
-  // Fetch claims data
-  const { data: claims = [], isLoading: claimsLoading } = useQuery({
-    queryKey: ["reports-claims"],
+  // Fetch monthly financial summary from view
+  const { data: monthlySummary = [], isLoading: monthlySummaryLoading } = useQuery({
+    queryKey: ["monthly-financial-summary"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("claims")
+        .from("monthly_financial_summary")
         .select("*")
-        .order("fill_date", { ascending: false });
+        .order("month", { ascending: true });
       if (error) throw error;
-      return data || [];
+      return (data || []) as MonthlyFinancialSummary[];
     },
   });
 
-  // Fetch prescriptions for capture rate calculation
-  const { data: prescriptions = [], isLoading: prescriptionsLoading } = useQuery({
-    queryKey: ["reports-prescriptions"],
+  // Fetch monthly pharmacy summary from view
+  const { data: pharmacySummary = [], isLoading: pharmacySummaryLoading } = useQuery({
+    queryKey: ["monthly-pharmacy-summary"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("prescriptions")
-        .select("id, pharmacy_id, prescribed_date");
+        .from("monthly_pharmacy_summary")
+        .select("*")
+        .order("month", { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []) as MonthlyPharmacySummary[];
     },
   });
 
-  const isLoading = claimsLoading || prescriptionsLoading;
+  // Fetch monthly payer summary from view
+  const { data: payerSummary = [], isLoading: payerSummaryLoading } = useQuery({
+    queryKey: ["monthly-payer-summary"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("monthly_payer_summary")
+        .select("*")
+        .order("month", { ascending: false });
+      if (error) throw error;
+      return (data || []) as MonthlyPayerSummary[];
+    },
+  });
 
-  // Calculate monthly savings analysis
-  const monthlySavings: MonthlySavings[] = useMemo(() => {
-    const monthlyMap = new Map<string, {
-      claims: number;
-      cost340b: number;
-      retailCost: number;
-      payments: number;
-    }>();
+  const isLoading = monthlySummaryLoading || pharmacySummaryLoading || payerSummaryLoading;
 
-    claims.forEach((claim) => {
-      if (!claim.fill_date) return;
-      const monthKey = format(parseISO(claim.fill_date), "yyyy-MM");
-      const existing = monthlyMap.get(monthKey) || {
-        claims: 0,
-        cost340b: 0,
-        retailCost: 0,
-        payments: 0,
-      };
-
-      monthlyMap.set(monthKey, {
-        claims: existing.claims + 1,
-        cost340b: existing.cost340b + (Number(claim.drug_cost_340b) || 0),
-        retailCost: existing.retailCost + (Number(claim.retail_drug_cost) || 0),
-        payments: existing.payments + (Number(claim.total_payment) || 0),
-      });
-    });
-
-    return Array.from(monthlyMap.entries())
-      .map(([month, data]) => ({
-        month: format(parseISO(`${month}-01`), "MMM yyyy"),
-        totalClaims: data.claims,
-        total340BCost: data.cost340b,
-        totalRetailCost: data.retailCost,
-        grossSavings: data.retailCost - data.cost340b,
-        totalPayments: data.payments,
-        netMargin: data.payments - data.cost340b,
-      }))
-      .sort((a, b) => a.month.localeCompare(b.month));
-  }, [claims]);
-
-  // Calculate pharmacy performance
-  const pharmacyPerformance: PharmacyPerformance[] = useMemo(() => {
-    const pharmacyMap = new Map<string, {
-      claims: number;
-      cost340b: number;
-      totalDaysToFill: number;
-      daysCount: number;
-    }>();
-
-    claims.forEach((claim) => {
-      const pharmacyName = claim.pharmacy_name || "Unknown";
-      const existing = pharmacyMap.get(pharmacyName) || {
-        claims: 0,
-        cost340b: 0,
-        totalDaysToFill: 0,
-        daysCount: 0,
-      };
-
-      let daysToFill = 0;
-      if (claim.fill_date && claim.date_rx_written) {
-        daysToFill = differenceInDays(
-          parseISO(claim.fill_date),
-          parseISO(claim.date_rx_written)
-        );
-      }
-
-      pharmacyMap.set(pharmacyName, {
-        claims: existing.claims + 1,
-        cost340b: existing.cost340b + (Number(claim.drug_cost_340b) || 0),
-        totalDaysToFill: existing.totalDaysToFill + daysToFill,
-        daysCount: existing.daysCount + (daysToFill > 0 ? 1 : 0),
-      });
-    });
-
-    // Calculate scripts per pharmacy for capture rate
-    const scriptsPerPharmacy = new Map<string, number>();
-    prescriptions.forEach((rx) => {
-      // Group by pharmacy - using pharmacy_id or "Unknown"
-      const pharmacyId = rx.pharmacy_id || "Unknown";
-      scriptsPerPharmacy.set(
-        pharmacyId,
-        (scriptsPerPharmacy.get(pharmacyId) || 0) + 1
-      );
-    });
-
-    return Array.from(pharmacyMap.entries())
-      .map(([name, data]) => ({
+  // Aggregate pharmacy performance across all months
+  const pharmacyPerformance = pharmacySummary.reduce((acc, row) => {
+    const name = row.pharmacy_name || "Unknown";
+    const existing = acc.find((p) => p.pharmacyName === name);
+    if (existing) {
+      existing.totalClaims += Number(row.total_claims) || 0;
+      existing.total340BCost += Number(row.total_340b_cost) || 0;
+      existing.totalPayments += Number(row.total_payments) || 0;
+      existing.grossSavings += Number(row.gross_savings) || 0;
+      existing.netMargin += Number(row.net_margin) || 0;
+      existing.avgDaysToFillSum += Number(row.avg_days_to_fill) || 0;
+      existing.monthCount += 1;
+    } else {
+      acc.push({
         pharmacyName: name,
-        totalClaims: data.claims,
-        total340BCost: data.cost340b,
-        avgDaysToFill: data.daysCount > 0 ? data.totalDaysToFill / data.daysCount : 0,
-        captureRate: 100, // Simplified - would need pharmacy_id mapping
-      }))
-      .sort((a, b) => b.totalClaims - a.totalClaims);
-  }, [claims, prescriptions]);
-
-  // Calculate payer mix analysis
-  const payerMix: PayerMix[] = useMemo(() => {
-    const payerMap = new Map<string, {
-      count: number;
-      totalPayment: number;
-      total340BCost: number;
-    }>();
-
-    claims.forEach((claim) => {
-      const payerType = claim.reason || "Unknown";
-      const existing = payerMap.get(payerType) || {
-        count: 0,
-        totalPayment: 0,
-        total340BCost: 0,
-      };
-
-      payerMap.set(payerType, {
-        count: existing.count + 1,
-        totalPayment: existing.totalPayment + (Number(claim.total_payment) || 0),
-        total340BCost: existing.total340BCost + (Number(claim.drug_cost_340b) || 0),
+        totalClaims: Number(row.total_claims) || 0,
+        total340BCost: Number(row.total_340b_cost) || 0,
+        totalPayments: Number(row.total_payments) || 0,
+        grossSavings: Number(row.gross_savings) || 0,
+        netMargin: Number(row.net_margin) || 0,
+        avgDaysToFillSum: Number(row.avg_days_to_fill) || 0,
+        monthCount: 1,
       });
-    });
+    }
+    return acc;
+  }, [] as Array<{
+    pharmacyName: string;
+    totalClaims: number;
+    total340BCost: number;
+    totalPayments: number;
+    grossSavings: number;
+    netMargin: number;
+    avgDaysToFillSum: number;
+    monthCount: number;
+  }>).map((p) => ({
+    ...p,
+    avgDaysToFill: p.monthCount > 0 ? p.avgDaysToFillSum / p.monthCount : 0,
+  })).sort((a, b) => b.totalClaims - a.totalClaims);
 
-    const totalClaims = claims.length;
-
-    return Array.from(payerMap.entries())
-      .map(([type, data]) => ({
+  // Aggregate payer mix across all months
+  const totalClaimsAll = payerSummary.reduce((sum, r) => sum + (Number(r.claim_count) || 0), 0);
+  const payerMix = payerSummary.reduce((acc, row) => {
+    const type = row.payer_type || "Unknown";
+    const existing = acc.find((p) => p.payerType === type);
+    if (existing) {
+      existing.claimCount += Number(row.claim_count) || 0;
+      existing.total340BCost += Number(row.total_340b_cost) || 0;
+      existing.totalPayments += Number(row.total_payments) || 0;
+    } else {
+      acc.push({
         payerType: type,
-        claimCount: data.count,
-        percentOfTotal: totalClaims > 0 ? (data.count / totalClaims) * 100 : 0,
-        avgPayment: data.count > 0 ? data.totalPayment / data.count : 0,
-        avg340BCost: data.count > 0 ? data.total340BCost / data.count : 0,
-      }))
-      .sort((a, b) => b.claimCount - a.claimCount);
-  }, [claims]);
+        claimCount: Number(row.claim_count) || 0,
+        total340BCost: Number(row.total_340b_cost) || 0,
+        totalPayments: Number(row.total_payments) || 0,
+      });
+    }
+    return acc;
+  }, [] as Array<{
+    payerType: string;
+    claimCount: number;
+    total340BCost: number;
+    totalPayments: number;
+  }>).map((p) => ({
+    payerType: p.payerType,
+    claimCount: p.claimCount,
+    percentOfTotal: totalClaimsAll > 0 ? (p.claimCount / totalClaimsAll) * 100 : 0,
+    avgPayment: p.claimCount > 0 ? p.totalPayments / p.claimCount : 0,
+    avg340BCost: p.claimCount > 0 ? p.total340BCost / p.claimCount : 0,
+  })).sort((a, b) => b.claimCount - a.claimCount);
 
   // Chart data for stacked bar
-  const chartData = useMemo(() => {
-    return monthlySavings.map((item) => ({
-      month: item.month,
-      "340B Cost": item.total340BCost,
-      Savings: item.grossSavings,
-    }));
-  }, [monthlySavings]);
+  const chartData = monthlySummary.map((item) => ({
+    month: formatMonth(item.month),
+    "340B Cost": Number(item.total_340b_cost) || 0,
+    Savings: Number(item.gross_savings) || 0,
+  }));
 
   // Export functions
   const exportToCSV = (data: Record<string, unknown>[], filename: string) => {
@@ -257,11 +227,22 @@ export default function Reports() {
     link.click();
   };
 
-  const exportToPDF = (sectionName: string) => {
-    // For PDF export, we'll create a printable version
-    // In a real app, you'd use a library like jsPDF or react-pdf
+  const exportToPDF = () => {
     window.print();
   };
+
+  // Calculate totals for monthly summary
+  const totalStats = monthlySummary.reduce(
+    (acc, row) => ({
+      totalClaims: acc.totalClaims + (Number(row.total_claims) || 0),
+      total340BCost: acc.total340BCost + (Number(row.total_340b_cost) || 0),
+      totalRetailCost: acc.totalRetailCost + (Number(row.total_retail_cost) || 0),
+      grossSavings: acc.grossSavings + (Number(row.gross_savings) || 0),
+      totalPayments: acc.totalPayments + (Number(row.total_payments) || 0),
+      netMargin: acc.netMargin + (Number(row.net_margin) || 0),
+    }),
+    { totalClaims: 0, total340BCost: 0, totalRetailCost: 0, grossSavings: 0, totalPayments: 0, netMargin: 0 }
+  );
 
   return (
     <DashboardLayout>
@@ -274,26 +255,26 @@ export default function Reports() {
           </p>
         </div>
 
-        {/* Section 1: 340B Savings Analysis */}
+        {/* Section 1: 340B Savings Analysis - Monthly Totals */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-primary" />
-              <CardTitle>340B Savings Analysis</CardTitle>
+              <CardTitle>340B Savings Analysis - Monthly Performance</CardTitle>
             </div>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => exportToCSV(
-                  monthlySavings.map((m) => ({
-                    Month: m.month,
-                    "Total Claims": m.totalClaims,
-                    "340B Cost": m.total340BCost,
-                    "Retail Cost": m.totalRetailCost,
-                    "Gross Savings": m.grossSavings,
-                    "Total Payments": m.totalPayments,
-                    "Net Margin": m.netMargin,
+                  monthlySummary.map((m) => ({
+                    Month: formatMonth(m.month),
+                    "Total Claims": m.total_claims,
+                    "340B Cost": m.total_340b_cost,
+                    "Retail Cost": m.total_retail_cost,
+                    "Gross Savings": m.gross_savings,
+                    "Total Payments": m.total_payments,
+                    "Net Margin": m.net_margin,
                   })),
                   "340b-savings-analysis"
                 )}
@@ -304,7 +285,7 @@ export default function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportToPDF("savings")}
+                onClick={exportToPDF}
               >
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
@@ -316,7 +297,7 @@ export default function Reports() {
               <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
               </div>
-            ) : monthlySavings.length === 0 ? (
+            ) : monthlySummary.length === 0 ? (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
                 No claims data available
               </div>
@@ -337,41 +318,31 @@ export default function Reports() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {monthlySavings.map((row) => (
+                      {monthlySummary.map((row) => (
                         <TableRow key={row.month}>
-                          <TableCell className="font-medium">{row.month}</TableCell>
-                          <TableCell className="text-right">{row.totalClaims.toLocaleString()}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.total340BCost)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.totalRetailCost)}</TableCell>
+                          <TableCell className="font-medium">{formatMonth(row.month)}</TableCell>
+                          <TableCell className="text-right">{Number(row.total_claims).toLocaleString()}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(row.total_340b_cost))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(row.total_retail_cost))}</TableCell>
                           <TableCell className="text-right text-green-600 font-medium">
-                            {formatCurrency(row.grossSavings)}
+                            {formatCurrency(Number(row.gross_savings))}
                           </TableCell>
-                          <TableCell className="text-right">{formatCurrency(row.totalPayments)}</TableCell>
-                          <TableCell className={`text-right font-medium ${row.netMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(row.netMargin)}
+                          <TableCell className="text-right">{formatCurrency(Number(row.total_payments))}</TableCell>
+                          <TableCell className={`text-right font-medium ${Number(row.net_margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(Number(row.net_margin))}
                           </TableCell>
                         </TableRow>
                       ))}
                       {/* Totals Row */}
                       <TableRow className="bg-muted/50 font-semibold">
                         <TableCell>Total</TableCell>
-                        <TableCell className="text-right">
-                          {monthlySavings.reduce((sum, r) => sum + r.totalClaims, 0).toLocaleString()}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(monthlySavings.reduce((sum, r) => sum + r.total340BCost, 0))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(monthlySavings.reduce((sum, r) => sum + r.totalRetailCost, 0))}
-                        </TableCell>
-                        <TableCell className="text-right text-green-600">
-                          {formatCurrency(monthlySavings.reduce((sum, r) => sum + r.grossSavings, 0))}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(monthlySavings.reduce((sum, r) => sum + r.totalPayments, 0))}
-                        </TableCell>
-                        <TableCell className={`text-right ${monthlySavings.reduce((sum, r) => sum + r.netMargin, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(monthlySavings.reduce((sum, r) => sum + r.netMargin, 0))}
+                        <TableCell className="text-right">{totalStats.totalClaims.toLocaleString()}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalStats.total340BCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalStats.totalRetailCost)}</TableCell>
+                        <TableCell className="text-right text-green-600">{formatCurrency(totalStats.grossSavings)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalStats.totalPayments)}</TableCell>
+                        <TableCell className={`text-right ${totalStats.netMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(totalStats.netMargin)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -415,12 +386,12 @@ export default function Reports() {
           </CardContent>
         </Card>
 
-        {/* Section 2: Pharmacy Performance */}
+        {/* Section 2: Pharmacy Performance - Aggregated */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
-              <CardTitle>Pharmacy Performance</CardTitle>
+              <CardTitle>Pharmacy Performance Summary</CardTitle>
             </div>
             <div className="flex gap-2">
               <Button
@@ -431,8 +402,10 @@ export default function Reports() {
                     "Pharmacy Name": p.pharmacyName,
                     "Total Claims": p.totalClaims,
                     "340B Cost": p.total340BCost,
+                    "Total Payments": p.totalPayments,
+                    "Gross Savings": p.grossSavings,
+                    "Net Margin": p.netMargin,
                     "Avg Days to Fill": p.avgDaysToFill,
-                    "Capture Rate %": p.captureRate,
                   })),
                   "pharmacy-performance"
                 )}
@@ -443,7 +416,7 @@ export default function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportToPDF("pharmacy")}
+                onClick={exportToPDF}
               >
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
@@ -466,9 +439,11 @@ export default function Reports() {
                     <TableRow>
                       <TableHead>Pharmacy Name</TableHead>
                       <TableHead className="text-right">Total Claims</TableHead>
-                      <TableHead className="text-right">Total 340B Cost</TableHead>
+                      <TableHead className="text-right">340B Cost</TableHead>
+                      <TableHead className="text-right">Total Payments</TableHead>
+                      <TableHead className="text-right">Gross Savings</TableHead>
+                      <TableHead className="text-right">Net Margin</TableHead>
                       <TableHead className="text-right">Avg Days to Fill</TableHead>
-                      <TableHead className="text-right">Capture Rate</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -477,14 +452,36 @@ export default function Reports() {
                         <TableCell className="font-medium">{row.pharmacyName}</TableCell>
                         <TableCell className="text-right">{row.totalClaims.toLocaleString()}</TableCell>
                         <TableCell className="text-right">{formatCurrency(row.total340BCost)}</TableCell>
-                        <TableCell className="text-right">{row.avgDaysToFill.toFixed(1)} days</TableCell>
-                        <TableCell className="text-right">
-                          <span className={`font-medium ${row.captureRate >= 80 ? 'text-green-600' : row.captureRate >= 60 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {formatPercent(row.captureRate)}
-                          </span>
+                        <TableCell className="text-right">{formatCurrency(row.totalPayments)}</TableCell>
+                        <TableCell className="text-right text-green-600 font-medium">
+                          {formatCurrency(row.grossSavings)}
                         </TableCell>
+                        <TableCell className={`text-right font-medium ${row.netMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(row.netMargin)}
+                        </TableCell>
+                        <TableCell className="text-right">{row.avgDaysToFill.toFixed(1)} days</TableCell>
                       </TableRow>
                     ))}
+                    {/* Totals Row */}
+                    <TableRow className="bg-muted/50 font-semibold">
+                      <TableCell>Total</TableCell>
+                      <TableCell className="text-right">
+                        {pharmacyPerformance.reduce((sum, r) => sum + r.totalClaims, 0).toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.total340BCost, 0))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.totalPayments, 0))}
+                      </TableCell>
+                      <TableCell className="text-right text-green-600">
+                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.grossSavings, 0))}
+                      </TableCell>
+                      <TableCell className={`text-right ${pharmacyPerformance.reduce((sum, r) => sum + r.netMargin, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.netMargin, 0))}
+                      </TableCell>
+                      <TableCell className="text-right">-</TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>
@@ -520,7 +517,7 @@ export default function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportToPDF("payer")}
+                onClick={exportToPDF}
               >
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
