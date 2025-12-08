@@ -692,6 +692,20 @@ export type Database = {
       }
     }
     Views: {
+      adherence_filter_options: {
+        Row: {
+          filter_type: string | null
+          filter_value: string | null
+        }
+        Relationships: []
+      }
+      adjudication_filter_options: {
+        Row: {
+          filter_type: string | null
+          filter_value: string | null
+        }
+        Relationships: []
+      }
       adjudication_status: {
         Row: {
           adjudication_status: string | null

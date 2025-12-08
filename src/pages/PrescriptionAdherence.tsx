@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useDebounce } from "use-debounce";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,15 +40,16 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
   PieChart,
   Pie,
   Cell,
   LineChart,
   Line,
+  Legend,
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { Tables } from "@/integrations/supabase/types";
+import { toast } from "@/hooks/use-toast";
 
 type AdherenceData = Tables<"prescription_adherence_analysis">;
 type MonthlyTrend = Tables<"monthly_adherence_trends">;
@@ -78,17 +80,52 @@ export default function PrescriptionAdherence() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [timeFilter, setTimeFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(25);
 
-  // Fetch prescription adherence data
-  const { data: adherenceData = [], isLoading: adherenceLoading } = useQuery({
-    queryKey: ["prescription-adherence"],
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, timeFilter, debouncedSearchQuery]);
+
+  // Fetch filter options
+  const { data: filterOptions } = useQuery({
+    queryKey: ["adherence-filter-options"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("adherence_filter_options")
+        .select("*");
+      
+      if (error) throw error;
+      
+      const statuses: string[] = [];
+      const timeCategories: string[] = [];
+      
+      (data || []).forEach((row: { filter_type: string; filter_value: string | null }) => {
+        if (row.filter_value) {
+          if (row.filter_type === "status") {
+            statuses.push(row.filter_value);
+          } else if (row.filter_type === "time_category") {
+            timeCategories.push(row.filter_value);
+          }
+        }
+      });
+      
+      return { statuses, timeCategories };
+    },
+  });
+
+  // Fetch summary stats for metrics (without pagination)
+  const { data: metricsData } = useQuery({
+    queryKey: ["adherence-metrics"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("prescription_adherence_analysis")
-        .select("*")
-        .order("prescribed_date", { ascending: false });
+        .select("adherence_status, fill_rate_pct, total_payments, days_to_first_fill");
       if (error) throw error;
-      return (data || []) as AdherenceData[];
+      return data || [];
     },
   });
 
@@ -119,84 +156,84 @@ export default function PrescriptionAdherence() {
     },
   });
 
+  // Fetch paginated adherence data
+  const { data: paginatedResult, isLoading: adherenceLoading } = useQuery({
+    queryKey: [
+      "prescription-adherence-paginated",
+      currentPage, pageSize, statusFilter, timeFilter, debouncedSearchQuery
+    ],
+    queryFn: async () => {
+      let query = supabase
+        .from("prescription_adherence_analysis")
+        .select("*", { count: "exact" });
+
+      // Apply filters
+      if (statusFilter !== "all") {
+        query = query.eq("adherence_status", statusFilter);
+      }
+      if (timeFilter !== "all") {
+        query = query.eq("time_to_fill_category", timeFilter);
+      }
+      if (debouncedSearchQuery) {
+        query = query.or(`patient_name.ilike.%${debouncedSearchQuery}%,drug_name.ilike.%${debouncedSearchQuery}%,patient_mrn.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
+      }
+
+      // Apply sorting and pagination
+      query = query.order("prescribed_date", { ascending: false, nullsFirst: false });
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+      if (error) throw error;
+      
+      return { data: data as AdherenceData[], totalCount: count || 0 };
+    },
+  });
+
+  const adherenceData = paginatedResult?.data || [];
+  const totalCount = paginatedResult?.totalCount || 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
   const isLoading = adherenceLoading || trendsLoading || drugLoading;
 
-  // Calculate summary metrics
+  // Calculate summary metrics from full dataset
   const metrics = useMemo(() => {
-    const total = adherenceData.length;
-    const fullyAdherent = adherenceData.filter(
-      (d) => d.adherence_status === "Fully Adherent"
-    ).length;
-    const partiallyAdherent = adherenceData.filter(
-      (d) => d.adherence_status === "Partially Adherent"
-    ).length;
-    const neverFilled = adherenceData.filter(
-      (d) => d.adherence_status === "Never Filled"
-    ).length;
+    if (!metricsData || metricsData.length === 0) {
+      return {
+        total: 0, fullyAdherent: 0, partiallyAdherent: 0, neverFilled: 0,
+        avgFillRate: 0, totalPayments: 0, avgDaysToFill: 0, adherenceRate: 0,
+      };
+    }
 
-    const avgFillRate =
-      total > 0
-        ? adherenceData.reduce((sum, d) => sum + (d.fill_rate_pct || 0), 0) / total
-        : 0;
+    const total = metricsData.length;
+    const fullyAdherent = metricsData.filter(d => d.adherence_status === "Fully Adherent").length;
+    const partiallyAdherent = metricsData.filter(d => d.adherence_status === "Partially Adherent").length;
+    const neverFilled = metricsData.filter(d => d.adherence_status === "Never Filled").length;
 
-    const totalPayments = adherenceData.reduce(
-      (sum, d) => sum + (d.total_payments || 0),
-      0
-    );
+    const avgFillRate = total > 0
+      ? metricsData.reduce((sum, d) => sum + (d.fill_rate_pct || 0), 0) / total
+      : 0;
 
-    const avgDaysToFill =
-      adherenceData.filter((d) => d.days_to_first_fill !== null).length > 0
-        ? adherenceData
-            .filter((d) => d.days_to_first_fill !== null)
-            .reduce((sum, d) => sum + (d.days_to_first_fill || 0), 0) /
-          adherenceData.filter((d) => d.days_to_first_fill !== null).length
-        : 0;
+    const totalPayments = metricsData.reduce((sum, d) => sum + (d.total_payments || 0), 0);
+
+    const filledScripts = metricsData.filter(d => d.days_to_first_fill !== null);
+    const avgDaysToFill = filledScripts.length > 0
+      ? filledScripts.reduce((sum, d) => sum + (d.days_to_first_fill || 0), 0) / filledScripts.length
+      : 0;
 
     return {
-      total,
-      fullyAdherent,
-      partiallyAdherent,
-      neverFilled,
-      avgFillRate,
-      totalPayments,
-      avgDaysToFill,
+      total, fullyAdherent, partiallyAdherent, neverFilled,
+      avgFillRate, totalPayments, avgDaysToFill,
       adherenceRate: total > 0 ? ((fullyAdherent + partiallyAdherent) / total) * 100 : 0,
     };
-  }, [adherenceData]);
-
-  // Filter data
-  const filteredData = useMemo(() => {
-    return adherenceData.filter((item) => {
-      // Search filter
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch =
-        !searchQuery ||
-        item.patient_name?.toLowerCase().includes(searchLower) ||
-        item.drug_name?.toLowerCase().includes(searchLower) ||
-        item.patient_mrn?.toLowerCase().includes(searchLower) ||
-        item.ndc_code?.toLowerCase().includes(searchLower);
-
-      // Status filter
-      const matchesStatus =
-        statusFilter === "all" || item.adherence_status === statusFilter;
-
-      // Time-to-fill filter
-      const matchesTime =
-        timeFilter === "all" || item.time_to_fill_category === timeFilter;
-
-      return matchesSearch && matchesStatus && matchesTime;
-    });
-  }, [adherenceData, searchQuery, statusFilter, timeFilter]);
+  }, [metricsData]);
 
   // Pie chart data for adherence status
-  const pieData = useMemo(
-    () => [
-      { name: "Fully Adherent", value: metrics.fullyAdherent, color: COLORS.fullyAdherent },
-      { name: "Partially Adherent", value: metrics.partiallyAdherent, color: COLORS.partiallyAdherent },
-      { name: "Never Filled", value: metrics.neverFilled, color: COLORS.neverFilled },
-    ],
-    [metrics]
-  );
+  const pieData = useMemo(() => [
+    { name: "Fully Adherent", value: metrics.fullyAdherent, color: COLORS.fullyAdherent },
+    { name: "Partially Adherent", value: metrics.partiallyAdherent, color: COLORS.partiallyAdherent },
+    { name: "Never Filled", value: metrics.neverFilled, color: COLORS.neverFilled },
+  ], [metrics]);
 
   // Trend chart data
   const trendChartData = useMemo(() => {
@@ -209,43 +246,68 @@ export default function PrescriptionAdherence() {
   }, [monthlyTrends]);
 
   // Export to CSV
-  const exportToCSV = () => {
-    const headers = [
-      "Patient Name",
-      "Patient MRN",
-      "Drug Name",
-      "NDC Code",
-      "Prescribed Date",
-      "Expected Fills",
-      "Actual Fills",
-      "Fill Rate %",
-      "Adherence Status",
-      "Days to First Fill",
-      "Total Payments",
-      "340B Cost",
-    ];
+  const handleExportCSV = async () => {
+    const exportLimit = 10000;
+    toast({ title: "Preparing export...", description: "Fetching data..." });
 
-    const rows = filteredData.map((item) => [
-      item.patient_name || "",
-      item.patient_mrn || "",
-      item.drug_name || "",
-      item.ndc_code || "",
-      item.prescribed_date || "",
-      item.expected_fills || 0,
-      item.total_fills || 0,
-      item.fill_rate_pct || 0,
-      item.adherence_status || "",
-      item.days_to_first_fill || "",
-      item.total_payments || 0,
-      item.total_340b_cost || 0,
-    ]);
+    try {
+      let query = supabase
+        .from("prescription_adherence_analysis")
+        .select("*");
 
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "prescription-adherence-report.csv";
-    link.click();
+      if (statusFilter !== "all") {
+        query = query.eq("adherence_status", statusFilter);
+      }
+      if (timeFilter !== "all") {
+        query = query.eq("time_to_fill_category", timeFilter);
+      }
+      if (debouncedSearchQuery) {
+        query = query.or(`patient_name.ilike.%${debouncedSearchQuery}%,drug_name.ilike.%${debouncedSearchQuery}%,patient_mrn.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
+      }
+
+      query = query.order("prescribed_date", { ascending: false }).limit(exportLimit);
+
+      const { data: exportData, error } = await query;
+      if (error) throw error;
+
+      if (!exportData || exportData.length === 0) {
+        toast({ title: "No data to export", variant: "destructive" });
+        return;
+      }
+
+      const headers = [
+        "Patient Name", "Patient MRN", "Drug Name", "NDC Code", "Prescribed Date",
+        "Expected Fills", "Actual Fills", "Fill Rate %", "Adherence Status",
+        "Days to First Fill", "Total Payments", "340B Cost",
+      ];
+
+      const rows = exportData.map((item) => [
+        item.patient_name || "",
+        item.patient_mrn || "",
+        item.drug_name || "",
+        item.ndc_code || "",
+        item.prescribed_date || "",
+        item.expected_fills || 0,
+        item.total_fills || 0,
+        item.fill_rate_pct || 0,
+        item.adherence_status || "",
+        item.days_to_first_fill || "",
+        item.total_payments || 0,
+        item.total_340b_cost || 0,
+      ]);
+
+      const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "prescription-adherence-report.csv";
+      link.click();
+
+      toast({ title: `Exported ${exportData.length.toLocaleString()} records` });
+    } catch (err) {
+      console.error("Export error:", err);
+      toast({ title: "Export failed", variant: "destructive" });
+    }
   };
 
   const getStatusBadge = (status: string | null) => {
@@ -289,7 +351,7 @@ export default function PrescriptionAdherence() {
               Track prescription fill rates, medication adherence, and patient compliance
             </p>
           </div>
-          <Button variant="outline" onClick={exportToCSV}>
+          <Button variant="outline" onClick={handleExportCSV}>
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
@@ -304,9 +366,7 @@ export default function PrescriptionAdherence() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{metrics.total.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                Scripts in tracking period
-              </p>
+              <p className="text-xs text-muted-foreground">Scripts in tracking period</p>
             </CardContent>
           </Card>
 
@@ -319,9 +379,7 @@ export default function PrescriptionAdherence() {
               <div className="text-2xl font-bold text-green-600">
                 {formatPercent(metrics.avgFillRate)}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Average across all scripts
-              </p>
+              <p className="text-xs text-muted-foreground">Average across all scripts</p>
             </CardContent>
           </Card>
 
@@ -331,12 +389,8 @@ export default function PrescriptionAdherence() {
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {metrics.avgDaysToFill.toFixed(1)} days
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Time from prescribed to filled
-              </p>
+              <div className="text-2xl font-bold">{metrics.avgDaysToFill.toFixed(1)} days</div>
+              <p className="text-xs text-muted-foreground">Time from prescribed to filled</p>
             </CardContent>
           </Card>
 
@@ -350,9 +404,7 @@ export default function PrescriptionAdherence() {
                 {metrics.neverFilled.toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
-                {metrics.total > 0
-                  ? `${((metrics.neverFilled / metrics.total) * 100).toFixed(1)}% of total`
-                  : "0% of total"}
+                {metrics.total > 0 ? `${((metrics.neverFilled / metrics.total) * 100).toFixed(1)}% of total` : "0% of total"}
               </p>
             </CardContent>
           </Card>
@@ -385,20 +437,13 @@ export default function PrescriptionAdherence() {
                         outerRadius={100}
                         paddingAngle={5}
                         dataKey="value"
-                        label={({ name, percent }) =>
-                          `${name}: ${(percent * 100).toFixed(0)}%`
-                        }
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       >
                         {pieData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip
-                        formatter={(value: number) => [
-                          value.toLocaleString(),
-                          "Prescriptions",
-                        ]}
-                      />
+                      <Tooltip formatter={(value: number) => [value.toLocaleString(), "Prescriptions"]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -428,17 +473,8 @@ export default function PrescriptionAdherence() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={trendChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis
-                        dataKey="month"
-                        stroke="hsl(var(--muted-foreground))"
-                        fontSize={12}
-                      />
-                      <YAxis
-                        stroke="hsl(var(--muted-foreground))"
-                        fontSize={12}
-                        tickFormatter={(v) => `${v}%`}
-                        domain={[0, 100]}
-                      />
+                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(v) => `${v}%`} domain={[0, 100]} />
                       <Tooltip
                         contentStyle={{
                           backgroundColor: "hsl(var(--card))",
@@ -451,14 +487,7 @@ export default function PrescriptionAdherence() {
                         ]}
                       />
                       <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="fillRate"
-                        stroke={COLORS.primary}
-                        strokeWidth={2}
-                        dot={{ fill: COLORS.primary }}
-                        name="Fill Rate %"
-                      />
+                      <Line type="monotone" dataKey="fillRate" stroke={COLORS.primary} strokeWidth={2} dot={{ fill: COLORS.primary }} name="Fill Rate %" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -487,18 +516,9 @@ export default function PrescriptionAdherence() {
             ) : (
               <div className="h-[350px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={drugSummary.slice(0, 10)}
-                    layout="vertical"
-                    margin={{ left: 150 }}
-                  >
+                  <BarChart data={drugSummary.slice(0, 10)} layout="vertical" margin={{ left: 150 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis
-                      type="number"
-                      domain={[0, 100]}
-                      tickFormatter={(v) => `${v}%`}
-                      stroke="hsl(var(--muted-foreground))"
-                    />
+                    <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} stroke="hsl(var(--muted-foreground))" />
                     <YAxis
                       type="category"
                       dataKey="drug_name"
@@ -515,12 +535,7 @@ export default function PrescriptionAdherence() {
                       }}
                       formatter={(value: number) => [`${value.toFixed(1)}%`, "Fill Rate"]}
                     />
-                    <Bar
-                      dataKey="fill_rate_pct"
-                      fill={COLORS.primary}
-                      radius={[0, 4, 4, 0]}
-                      name="Fill Rate %"
-                    />
+                    <Bar dataKey="fill_rate_pct" fill={COLORS.primary} radius={[0, 4, 4, 0]} name="Fill Rate %" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -532,7 +547,7 @@ export default function PrescriptionAdherence() {
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Prescription Details</CardTitle>
+              <CardTitle>Prescription Details ({totalCount.toLocaleString()})</CardTitle>
               <div className="flex flex-wrap gap-2">
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -560,99 +575,118 @@ export default function PrescriptionAdherence() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Times</SelectItem>
-                    <SelectItem value="Prompt (0-3 days)">Prompt (0-3 days)</SelectItem>
-                    <SelectItem value="Normal (4-7 days)">Normal (4-7 days)</SelectItem>
-                    <SelectItem value="Delayed (8-14 days)">Delayed (8-14 days)</SelectItem>
-                    <SelectItem value="Very Delayed (>14 days)">Very Delayed (&gt;14 days)</SelectItem>
-                    <SelectItem value="Never Filled">Never Filled</SelectItem>
+                    {filterOptions?.timeCategories.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={pageSize.toString()} onValueChange={(v) => { setPageSize(parseInt(v)); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
+            {adherenceLoading ? (
               <div className="flex items-center justify-center h-32">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
               </div>
-            ) : filteredData.length === 0 ? (
+            ) : adherenceData.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
                 No prescriptions found
               </div>
             ) : (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Patient</TableHead>
-                      <TableHead>Drug</TableHead>
-                      <TableHead>Prescribed</TableHead>
-                      <TableHead className="text-center">Expected</TableHead>
-                      <TableHead className="text-center">Filled</TableHead>
-                      <TableHead className="text-center">Fill Rate</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Days to Fill</TableHead>
-                      <TableHead className="text-right">Total Payments</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredData.slice(0, 100).map((item, index) => (
-                      <TableRow key={item.prescription_id || index}>
-                        <TableCell>
-                          <div className="font-medium">{item.patient_name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            MRN: {item.patient_mrn || "N/A"}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">
-                            {item.drug_name?.length > 30
-                              ? item.drug_name.substring(0, 30) + "..."
-                              : item.drug_name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {item.ndc_code}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {item.prescribed_date
-                            ? format(parseISO(item.prescribed_date), "MMM d, yyyy")
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell className="text-center">{item.expected_fills}</TableCell>
-                        <TableCell className="text-center">{item.total_fills}</TableCell>
-                        <TableCell className="text-center">
-                          <span
-                            className={`font-medium ${
-                              (item.fill_rate_pct || 0) >= 80
-                                ? "text-green-600"
-                                : (item.fill_rate_pct || 0) >= 50
-                                ? "text-yellow-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {formatPercent(item.fill_rate_pct)}
-                          </span>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(item.adherence_status)}</TableCell>
-                        <TableCell className="text-right">
-                          {item.days_to_first_fill !== null
-                            ? `${item.days_to_first_fill} days`
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(item.total_payments)}
-                        </TableCell>
+              <>
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Patient</TableHead>
+                        <TableHead>Drug</TableHead>
+                        <TableHead>Prescribed</TableHead>
+                        <TableHead className="text-center">Expected</TableHead>
+                        <TableHead className="text-center">Filled</TableHead>
+                        <TableHead className="text-center">Fill Rate</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Days to Fill</TableHead>
+                        <TableHead className="text-right">Total Payments</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-            {filteredData.length > 100 && (
-              <p className="text-sm text-muted-foreground mt-4 text-center">
-                Showing first 100 of {filteredData.length.toLocaleString()} prescriptions
-              </p>
+                    </TableHeader>
+                    <TableBody>
+                      {adherenceData.map((item, index) => (
+                        <TableRow key={item.prescription_id || index}>
+                          <TableCell>
+                            <div className="font-medium">{item.patient_name}</div>
+                            <div className="text-xs text-muted-foreground">MRN: {item.patient_mrn || "N/A"}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">
+                              {item.drug_name?.length && item.drug_name.length > 30
+                                ? item.drug_name.substring(0, 30) + "..."
+                                : item.drug_name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">{item.ndc_code}</div>
+                          </TableCell>
+                          <TableCell>
+                            {item.prescribed_date ? format(parseISO(item.prescribed_date), "MMM d, yyyy") : "N/A"}
+                          </TableCell>
+                          <TableCell className="text-center">{item.expected_fills}</TableCell>
+                          <TableCell className="text-center">{item.total_fills}</TableCell>
+                          <TableCell className="text-center">
+                            <span
+                              className={`font-medium ${
+                                (item.fill_rate_pct || 0) >= 80
+                                  ? "text-green-600"
+                                  : (item.fill_rate_pct || 0) >= 50
+                                  ? "text-yellow-600"
+                                  : "text-red-600"
+                              }`}
+                            >
+                              {formatPercent(item.fill_rate_pct)}
+                            </span>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(item.adherence_status)}</TableCell>
+                          <TableCell className="text-right">
+                            {item.days_to_first_fill !== null ? `${item.days_to_first_fill} days` : "-"}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(item.total_payments)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()} prescriptions
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>
+                      First
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground px-2">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0}>
+                      Next
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages || totalPages === 0}>
+                      Last
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
