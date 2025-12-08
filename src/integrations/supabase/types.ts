@@ -760,7 +760,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "prescriptions_drug_id_fkey"
+            foreignKeyName: "claims_drug_id_fkey"
             columns: ["drug_id"]
             isOneToOne: false
             referencedRelation: "drugs"
@@ -979,41 +979,36 @@ export type Database = {
           refills_authorized: number | null
           time_to_fill_category: string | null
           total_340b_cost: number | null
+          total_benefit_340b: number | null
           total_days_supplied: number | null
           total_fills: number | null
           total_payments: number | null
+          total_retail_cost: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "prescriptions_drug_id_fkey"
+            foreignKeyName: "claims_drug_id_fkey"
             columns: ["drug_id"]
             isOneToOne: false
             referencedRelation: "drugs"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "prescriptions_patient_id_fkey"
-            columns: ["patient_id"]
-            isOneToOne: false
-            referencedRelation: "patients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            foreignKeyName: "claims_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            foreignKeyName: "claims_pharmacy_id_fkey"
             columns: ["pharmacy_id"]
             isOneToOne: false
             referencedRelation: "pharmacy_contract_compliance"
             referencedColumns: ["pharmacy_id"]
           },
           {
-            foreignKeyName: "prescriptions_prescriber_id_fkey"
+            foreignKeyName: "claims_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
             referencedRelation: "prescribers"
