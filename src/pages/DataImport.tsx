@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { parseScriptsFile, ParseProgress } from "@/utils/scriptsParser";
+import { parseClaimsFile, ClaimParseProgress } from "@/utils/claimsParser";
 import { useToast } from "@/hooks/use-toast";
 interface ImportHistoryItem {
   id: string;
@@ -295,9 +296,33 @@ const DataImport = () => {
     }
   };
 
-  const handleProcessClaims = () => {
-    // TODO: Implement claims parsing
-    console.log("Processing claims...");
+  const handleProcessClaims = async () => {
+    if (!claimsFile) return;
+
+    setIsProcessingClaims(true);
+    setClaimsProgress(null);
+
+    try {
+      const claims = await parseClaimsFile(claimsFile, setClaimsProgress);
+      
+      toast({
+        title: "Claims Parsed Successfully",
+        description: `Parsed ${claims.length.toLocaleString()} claim records from ${claimsFile.name}`,
+      });
+
+      console.log("Parsed claims:", claims);
+      // TODO: Save to database
+      
+      setClaimsFile(null);
+    } catch (error) {
+      toast({
+        title: "Error Parsing Claims",
+        description: error instanceof Error ? error.message : "Failed to parse the CSV file",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingClaims(false);
+    }
   };
 
   return (
