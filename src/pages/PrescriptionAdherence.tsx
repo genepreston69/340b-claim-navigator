@@ -176,7 +176,7 @@ export default function PrescriptionAdherence() {
         query = query.eq("time_to_fill_category", timeFilter);
       }
       if (debouncedSearchQuery) {
-        query = query.or(`patient_name.ilike.%${debouncedSearchQuery}%,drug_name.ilike.%${debouncedSearchQuery}%,patient_mrn.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
+        query = query.or(`drug_name.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
       }
 
       // Apply sorting and pagination
@@ -255,7 +255,7 @@ export default function PrescriptionAdherence() {
         query = query.eq("time_to_fill_category", timeFilter);
       }
       if (debouncedSearchQuery) {
-        query = query.or(`patient_name.ilike.%${debouncedSearchQuery}%,drug_name.ilike.%${debouncedSearchQuery}%,patient_mrn.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
+        query = query.or(`drug_name.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
       }
 
       query = query.order("prescribed_date", { ascending: false }).limit(exportLimit);
@@ -269,14 +269,12 @@ export default function PrescriptionAdherence() {
       }
 
       const headers = [
-        "Patient Name", "Patient MRN", "Drug Name", "NDC Code", "Prescribed Date",
+        "Drug Name", "NDC Code", "Prescribed Date",
         "Expected Fills", "Actual Fills", "Fill Rate %", "Adherence Status",
         "Days to First Fill", "Total Payments", "340B Cost",
       ];
 
       const rows = exportData.map((item) => [
-        item.patient_name || "",
-        item.patient_mrn || "",
         item.drug_name || "",
         item.ndc_code || "",
         item.prescribed_date || "",
@@ -586,7 +584,6 @@ export default function PrescriptionAdherence() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Patient</TableHead>
                         <TableHead>Drug</TableHead>
                         <TableHead>Prescribed</TableHead>
                         <TableHead className="text-center">Expected</TableHead>
@@ -600,10 +597,6 @@ export default function PrescriptionAdherence() {
                     <TableBody>
                       {adherenceData.map((item, index) => (
                         <TableRow key={item.prescription_id || index}>
-                          <TableCell>
-                            <div className="font-medium">{item.patient_name}</div>
-                            <div className="text-xs text-muted-foreground">MRN: {item.patient_mrn || "N/A"}</div>
-                          </TableCell>
                           <TableCell>
                             <div className="font-medium">
                               {item.drug_name?.length && item.drug_name.length > 30
