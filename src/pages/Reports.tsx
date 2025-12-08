@@ -31,7 +31,7 @@ interface MonthlyFinancialSummary {
   total_retail_cost: number;
   gross_savings: number;
   total_payments: number;
-  net_margin: number;
+  benefit_340b: number;
   total_patient_pay: number;
   total_third_party_payment: number;
   total_dispensing_fees: number;
@@ -47,7 +47,7 @@ interface MonthlyPharmacySummary {
   total_retail_cost: number;
   gross_savings: number;
   total_payments: number;
-  net_margin: number;
+  benefit_340b: number;
   total_patient_pay: number;
   total_third_party_payment: number;
   avg_days_to_fill: number;
@@ -134,7 +134,7 @@ export default function Reports() {
       existing.total340BCost += Number(row.total_340b_cost) || 0;
       existing.totalPayments += Number(row.total_payments) || 0;
       existing.grossSavings += Number(row.gross_savings) || 0;
-      existing.netMargin += Number(row.net_margin) || 0;
+      existing.benefit340B += Number(row.benefit_340b) || 0;
       existing.avgDaysToFillSum += Number(row.avg_days_to_fill) || 0;
       existing.monthCount += 1;
     } else {
@@ -144,7 +144,7 @@ export default function Reports() {
         total340BCost: Number(row.total_340b_cost) || 0,
         totalPayments: Number(row.total_payments) || 0,
         grossSavings: Number(row.gross_savings) || 0,
-        netMargin: Number(row.net_margin) || 0,
+        benefit340B: Number(row.benefit_340b) || 0,
         avgDaysToFillSum: Number(row.avg_days_to_fill) || 0,
         monthCount: 1,
       });
@@ -156,7 +156,7 @@ export default function Reports() {
     total340BCost: number;
     totalPayments: number;
     grossSavings: number;
-    netMargin: number;
+    benefit340B: number;
     avgDaysToFillSum: number;
     monthCount: number;
   }>).map((p) => ({
@@ -239,9 +239,9 @@ export default function Reports() {
       totalRetailCost: acc.totalRetailCost + (Number(row.total_retail_cost) || 0),
       grossSavings: acc.grossSavings + (Number(row.gross_savings) || 0),
       totalPayments: acc.totalPayments + (Number(row.total_payments) || 0),
-      netMargin: acc.netMargin + (Number(row.net_margin) || 0),
+      benefit340B: acc.benefit340B + (Number(row.benefit_340b) || 0),
     }),
-    { totalClaims: 0, total340BCost: 0, totalRetailCost: 0, grossSavings: 0, totalPayments: 0, netMargin: 0 }
+    { totalClaims: 0, total340BCost: 0, totalRetailCost: 0, grossSavings: 0, totalPayments: 0, benefit340B: 0 }
   );
 
   return (
@@ -266,7 +266,7 @@ export default function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportToCSV(
+              onClick={() => exportToCSV(
                   monthlySummary.map((m) => ({
                     Month: formatMonth(m.month),
                     "Total Claims": m.total_claims,
@@ -274,7 +274,7 @@ export default function Reports() {
                     "Retail Cost": m.total_retail_cost,
                     "Gross Savings": m.gross_savings,
                     "Total Payments": m.total_payments,
-                    "Net Margin": m.net_margin,
+                    "340B Benefit": m.benefit_340b,
                   })),
                   "340b-savings-analysis"
                 )}
@@ -314,7 +314,7 @@ export default function Reports() {
                         <TableHead className="text-right">Retail Cost</TableHead>
                         <TableHead className="text-right">Gross Savings</TableHead>
                         <TableHead className="text-right">Payments Received</TableHead>
-                        <TableHead className="text-right">Net Margin</TableHead>
+                        <TableHead className="text-right">340B Benefit</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -328,8 +328,8 @@ export default function Reports() {
                             {formatCurrency(Number(row.gross_savings))}
                           </TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(row.total_payments))}</TableCell>
-                          <TableCell className={`text-right font-medium ${Number(row.net_margin) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(Number(row.net_margin))}
+                          <TableCell className={`text-right font-medium ${Number(row.benefit_340b) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(Number(row.benefit_340b))}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -341,8 +341,8 @@ export default function Reports() {
                         <TableCell className="text-right">{formatCurrency(totalStats.totalRetailCost)}</TableCell>
                         <TableCell className="text-right text-green-600">{formatCurrency(totalStats.grossSavings)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(totalStats.totalPayments)}</TableCell>
-                        <TableCell className={`text-right ${totalStats.netMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(totalStats.netMargin)}
+                        <TableCell className={`text-right ${totalStats.benefit340B >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(totalStats.benefit340B)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -397,14 +397,14 @@ export default function Reports() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportToCSV(
+              onClick={() => exportToCSV(
                   pharmacyPerformance.map((p) => ({
                     "Pharmacy Name": p.pharmacyName,
                     "Total Claims": p.totalClaims,
                     "340B Cost": p.total340BCost,
                     "Total Payments": p.totalPayments,
                     "Gross Savings": p.grossSavings,
-                    "Net Margin": p.netMargin,
+                    "340B Benefit": p.benefit340B,
                     "Avg Days to Fill": p.avgDaysToFill,
                   })),
                   "pharmacy-performance"
@@ -442,7 +442,7 @@ export default function Reports() {
                       <TableHead className="text-right">340B Cost</TableHead>
                       <TableHead className="text-right">Total Payments</TableHead>
                       <TableHead className="text-right">Gross Savings</TableHead>
-                      <TableHead className="text-right">Net Margin</TableHead>
+                      <TableHead className="text-right">340B Benefit</TableHead>
                       <TableHead className="text-right">Avg Days to Fill</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -456,8 +456,8 @@ export default function Reports() {
                         <TableCell className="text-right text-green-600 font-medium">
                           {formatCurrency(row.grossSavings)}
                         </TableCell>
-                        <TableCell className={`text-right font-medium ${row.netMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(row.netMargin)}
+                        <TableCell className={`text-right font-medium ${row.benefit340B >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(row.benefit340B)}
                         </TableCell>
                         <TableCell className="text-right">{row.avgDaysToFill.toFixed(1)} days</TableCell>
                       </TableRow>
@@ -477,8 +477,8 @@ export default function Reports() {
                       <TableCell className="text-right text-green-600">
                         {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.grossSavings, 0))}
                       </TableCell>
-                      <TableCell className={`text-right ${pharmacyPerformance.reduce((sum, r) => sum + r.netMargin, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.netMargin, 0))}
+                      <TableCell className={`text-right ${pharmacyPerformance.reduce((sum, r) => sum + r.benefit340B, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.benefit340B, 0))}
                       </TableCell>
                       <TableCell className="text-right">-</TableCell>
                     </TableRow>
