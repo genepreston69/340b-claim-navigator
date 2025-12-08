@@ -117,15 +117,16 @@ export default function PrescriptionAdherence() {
     },
   });
 
-  // Fetch summary stats for metrics (without pagination)
-  const { data: metricsData } = useQuery({
-    queryKey: ["adherence-metrics"],
+  // Fetch summary stats for metrics from aggregated view
+  const { data: metricsSummary } = useQuery({
+    queryKey: ["adherence-metrics-summary"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("prescription_adherence_analysis")
-        .select("adherence_status, fill_rate_pct, total_payments, days_to_first_fill");
+        .from("adherence_metrics_summary")
+        .select("*")
+        .maybeSingle();
       if (error) throw error;
-      return data || [];
+      return data;
     },
   });
 
@@ -196,37 +197,29 @@ export default function PrescriptionAdherence() {
   const totalPages = Math.ceil(totalCount / pageSize);
   const isLoading = adherenceLoading || trendsLoading || drugLoading;
 
-  // Calculate summary metrics from full dataset
+  // Use pre-aggregated metrics from summary view
   const metrics = useMemo(() => {
-    if (!metricsData || metricsData.length === 0) {
+    if (!metricsSummary) {
       return {
         total: 0, fullyAdherent: 0, partiallyAdherent: 0, neverFilled: 0,
         avgFillRate: 0, totalPayments: 0, avgDaysToFill: 0, adherenceRate: 0,
       };
     }
 
-    const total = metricsData.length;
-    const fullyAdherent = metricsData.filter(d => d.adherence_status === "Fully Adherent").length;
-    const partiallyAdherent = metricsData.filter(d => d.adherence_status === "Partially Adherent").length;
-    const neverFilled = metricsData.filter(d => d.adherence_status === "Never Filled").length;
-
-    const avgFillRate = total > 0
-      ? metricsData.reduce((sum, d) => sum + (d.fill_rate_pct || 0), 0) / total
-      : 0;
-
-    const totalPayments = metricsData.reduce((sum, d) => sum + (d.total_payments || 0), 0);
-
-    const filledScripts = metricsData.filter(d => d.days_to_first_fill !== null);
-    const avgDaysToFill = filledScripts.length > 0
-      ? filledScripts.reduce((sum, d) => sum + (d.days_to_first_fill || 0), 0) / filledScripts.length
-      : 0;
+    const total = Number(metricsSummary.total_prescriptions) || 0;
+    const fullyAdherent = Number(metricsSummary.fully_adherent) || 0;
+    const partiallyAdherent = Number(metricsSummary.partially_adherent) || 0;
+    const neverFilled = Number(metricsSummary.never_filled) || 0;
+    const avgFillRate = Number(metricsSummary.avg_fill_rate) || 0;
+    const totalPayments = Number(metricsSummary.total_payments) || 0;
+    const avgDaysToFill = Number(metricsSummary.avg_days_to_fill) || 0;
 
     return {
       total, fullyAdherent, partiallyAdherent, neverFilled,
       avgFillRate, totalPayments, avgDaysToFill,
       adherenceRate: total > 0 ? ((fullyAdherent + partiallyAdherent) / total) * 100 : 0,
     };
-  }, [metricsData]);
+  }, [metricsSummary]);
 
   // Pie chart data for adherence status
   const pieData = useMemo(() => [
