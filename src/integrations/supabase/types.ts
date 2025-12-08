@@ -755,6 +755,156 @@ export type Database = {
           },
         ]
       }
+      prescription_adherence_analysis: {
+        Row: {
+          prescription_id: string | null
+          prescription_identifier: number | null
+          prescribed_date: string | null
+          patient_id: string | null
+          patient_mrn: string | null
+          patient_name: string | null
+          drug_id: string | null
+          ndc_code: string | null
+          drug_name: string | null
+          prescribed_days_supply: number | null
+          refills_authorized: number | null
+          prescriber_id: string | null
+          pharmacy_id: string | null
+          total_fills: number | null
+          total_days_supplied: number | null
+          first_fill_date: string | null
+          last_fill_date: string | null
+          days_to_first_fill: number | null
+          total_payments: number | null
+          total_340b_cost: number | null
+          expected_fills: number | null
+          fill_rate_pct: number | null
+          adherence_status: string | null
+          time_to_fill_category: string | null
+        }
+        Relationships: []
+      }
+      physician_capture_rates: {
+        Row: {
+          prescriber_id: string | null
+          prescriber_first_name: string | null
+          prescriber_last_name: string | null
+          prescriber_full_name: string | null
+          prescriber_npi: number | null
+          prescriber_dea: string | null
+          total_prescriptions: number | null
+          unique_patients: number | null
+          unique_drugs: number | null
+          total_claims: number | null
+          prescriptions_filled: number | null
+          total_payments: number | null
+          total_340b_cost: number | null
+          total_retail_cost: number | null
+          gross_savings: number | null
+          avg_days_to_fill: number | null
+          pharmacies_used: number | null
+          capture_rate_pct: number | null
+          performance_tier: string | null
+          estimated_lost_revenue: number | null
+        }
+        Relationships: []
+      }
+      drug_pharmacy_comparison: {
+        Row: {
+          drug_id: string | null
+          ndc_code: string | null
+          drug_name: string | null
+          manufacturer_name: string | null
+          pharmacy_id: string | null
+          pharmacy_name: string | null
+          chain_pharmacy: string | null
+          claim_count: number | null
+          total_qty_dispensed: number | null
+          total_payments: number | null
+          total_340b_cost: number | null
+          total_retail_cost: number | null
+          gross_savings: number | null
+          avg_payment_per_claim: number | null
+          avg_profit_per_claim: number | null
+          first_fill_date: string | null
+          last_fill_date: string | null
+          total_pharmacies_dispensing: number | null
+          drug_total_claims: number | null
+          pharmacy_market_share_pct: number | null
+          single_pharmacy_drug: boolean | null
+        }
+        Relationships: []
+      }
+      pharmacy_contract_compliance: {
+        Row: {
+          pharmacy_id: string | null
+          pharmacy_name: string | null
+          chain_pharmacy: string | null
+          npi_number: number | null
+          nabp_number: number | null
+          prescriptions_written: number | null
+          patients_with_scripts: number | null
+          prescribers_writing: number | null
+          first_prescription_date: string | null
+          last_prescription_date: string | null
+          total_claims: number | null
+          prescriptions_filled: number | null
+          total_payments: number | null
+          total_340b_cost: number | null
+          total_retail_cost: number | null
+          gross_savings: number | null
+          first_claim_date: string | null
+          last_claim_date: string | null
+          unique_drugs_dispensed: number | null
+          unique_prescribers_served: number | null
+          contract_status: string | null
+          capture_rate_pct: number | null
+          estimated_lost_revenue: number | null
+          days_since_last_claim: number | null
+        }
+        Relationships: []
+      }
+      monthly_adherence_trends: {
+        Row: {
+          month: string | null
+          total_prescriptions: number | null
+          prescriptions_filled: number | null
+          total_claims: number | null
+          fill_rate_pct: number | null
+          avg_days_to_fill: number | null
+          total_payments: number | null
+          total_340b_cost: number | null
+          total_retail_cost: number | null
+          gross_savings: number | null
+          unique_patients: number | null
+          unique_prescribers: number | null
+          unique_pharmacies: number | null
+        }
+        Relationships: []
+      }
+      drug_adherence_summary: {
+        Row: {
+          drug_id: string | null
+          ndc_code: string | null
+          drug_name: string | null
+          manufacturer_name: string | null
+          total_prescriptions: number | null
+          unique_patients: number | null
+          unique_prescribers: number | null
+          total_claims: number | null
+          total_qty_dispensed: number | null
+          fill_rate_pct: number | null
+          avg_days_to_fill: number | null
+          total_payments: number | null
+          total_340b_cost: number | null
+          total_retail_cost: number | null
+          gross_savings: number | null
+          avg_payment_per_claim: number | null
+          avg_340b_cost_per_claim: number | null
+          pharmacies_dispensing: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_all_users_with_roles: {
