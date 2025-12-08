@@ -47,7 +47,6 @@ export function RecentClaimsTable({ claims, isLoading }: RecentClaimsTableProps)
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Patient</TableHead>
                   <TableHead>Drug</TableHead>
                   <TableHead>Pharmacy</TableHead>
                   <TableHead className="text-right">Payment</TableHead>
@@ -58,11 +57,6 @@ export function RecentClaimsTable({ claims, isLoading }: RecentClaimsTableProps)
                   <TableRow key={claim.id} className="hover:bg-muted/50">
                     <TableCell className="text-sm">
                       {claim.fill_date ? format(new Date(claim.fill_date), "MMM d") : "-"}
-                    </TableCell>
-                    <TableCell className="text-sm font-medium">
-                      {claim.first_name && claim.last_name 
-                        ? `${claim.first_name} ${claim.last_name.charAt(0)}.` 
-                        : "-"}
                     </TableCell>
                     <TableCell className="text-sm max-w-[150px] truncate">
                       {claim.drug_name || "-"}
