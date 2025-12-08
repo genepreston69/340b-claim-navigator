@@ -1,4 +1,4 @@
-import { LayoutDashboard, FileText, Receipt, Scale, Settings, Activity, Upload, BarChart3, Users, Pill, Stethoscope, Building2, FileWarning } from "lucide-react";
+import { LayoutDashboard, FileText, Receipt, Scale, Settings, Upload, BarChart3, Users, Pill, Stethoscope, Building2, FileWarning } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -63,17 +63,12 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r-0">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-            <Activity className="h-5 w-5 text-sidebar-primary-foreground" />
+        {!isCollapsed && (
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-sidebar-foreground">340B Claims</span>
+            <span className="text-xs text-sidebar-foreground/60">Tracker</span>
           </div>
-          {!isCollapsed && (
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold text-sidebar-foreground">340B Claims</span>
-              <span className="text-xs text-sidebar-foreground/60">Tracker</span>
-            </div>
-          )}
-        </div>
+        )}
       </SidebarHeader>
       <SidebarContent className="px-2 py-4">
         {/* Main Navigation */}
