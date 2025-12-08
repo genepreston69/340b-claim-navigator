@@ -1,5 +1,6 @@
 import { LayoutDashboard, FileText, Receipt, Scale, Settings, Activity, Upload, BarChart3 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
+import { useAuth } from "@/hooks/useAuth";
 import {
   Sidebar,
   SidebarContent,
@@ -14,18 +15,21 @@ import {
 } from "@/components/ui/sidebar";
 
 const navigationItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Scripts", url: "/scripts", icon: FileText },
-  { title: "Claims", url: "/claims", icon: Receipt },
-  { title: "Adjudication", url: "/adjudication", icon: Scale },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-  { title: "Data Import", url: "/data-import", icon: Upload },
-  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Dashboard", url: "/", icon: LayoutDashboard, adminOnly: false },
+  { title: "Scripts", url: "/scripts", icon: FileText, adminOnly: true },
+  { title: "Claims", url: "/claims", icon: Receipt, adminOnly: true },
+  { title: "Adjudication", url: "/adjudication", icon: Scale, adminOnly: true },
+  { title: "Reports", url: "/reports", icon: BarChart3, adminOnly: true },
+  { title: "Data Import", url: "/data-import", icon: Upload, adminOnly: true },
+  { title: "Settings", url: "/settings", icon: Settings, adminOnly: true },
 ];
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { isAdmin } = useAuth();
   const isCollapsed = state === "collapsed";
+
+  const visibleItems = navigationItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <Sidebar collapsible="icon" className="border-r-0">
@@ -49,7 +53,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent className="mt-2">
             <SidebarMenu>
-              {navigationItems.map((item) => (
+              {visibleItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
