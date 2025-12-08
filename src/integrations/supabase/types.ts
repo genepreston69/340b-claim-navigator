@@ -14,7 +14,257 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      covered_entities: {
+        Row: {
+          created_at: string | null
+          entity_name: string
+          id: string
+          opaid: string
+          organization_identifier: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entity_name: string
+          id?: string
+          opaid: string
+          organization_identifier?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entity_name?: string
+          id?: string
+          opaid?: string
+          organization_identifier?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      drugs: {
+        Row: {
+          created_at: string | null
+          dose: string | null
+          dose_units: string | null
+          drug_form: string | null
+          drug_indicator: string | null
+          drug_name: string | null
+          id: string
+          manufacturer_name: string | null
+          ndc_code: string
+          package_size: number | null
+          route_of_administration: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          dose?: string | null
+          dose_units?: string | null
+          drug_form?: string | null
+          drug_indicator?: string | null
+          drug_name?: string | null
+          id?: string
+          manufacturer_name?: string | null
+          ndc_code: string
+          package_size?: number | null
+          route_of_administration?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          dose?: string | null
+          dose_units?: string | null
+          drug_form?: string | null
+          drug_indicator?: string | null
+          drug_name?: string | null
+          id?: string
+          manufacturer_name?: string | null
+          ndc_code?: string
+          package_size?: number | null
+          route_of_administration?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      insurance_plans: {
+        Row: {
+          bin: string | null
+          created_at: string | null
+          id: string
+          insurance_company: string
+          is_medicaid: boolean | null
+          is_primary: boolean | null
+          pcn: string | null
+          plan_group: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bin?: string | null
+          created_at?: string | null
+          id?: string
+          insurance_company: string
+          is_medicaid?: boolean | null
+          is_primary?: boolean | null
+          pcn?: string | null
+          plan_group?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bin?: string | null
+          created_at?: string | null
+          id?: string
+          insurance_company?: string
+          is_medicaid?: boolean | null
+          is_primary?: boolean | null
+          pcn?: string | null
+          plan_group?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      locations: {
+        Row: {
+          covered_entity_id: string | null
+          created_at: string | null
+          id: string
+          location_identifier: string | null
+          location_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          covered_entity_id?: string | null
+          created_at?: string | null
+          id?: string
+          location_identifier?: string | null
+          location_name: string
+          updated_at?: string | null
+        }
+        Update: {
+          covered_entity_id?: string | null
+          created_at?: string | null
+          id?: string
+          location_identifier?: string | null
+          location_name?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "locations_covered_entity_id_fkey"
+            columns: ["covered_entity_id"]
+            isOneToOne: false
+            referencedRelation: "covered_entities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      patients: {
+        Row: {
+          created_at: string | null
+          date_of_birth: string | null
+          first_name: string
+          gender: string | null
+          id: string
+          last_name: string
+          middle_name: string | null
+          mrn: string | null
+          patient_id_external: string | null
+          suffix: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          date_of_birth?: string | null
+          first_name: string
+          gender?: string | null
+          id?: string
+          last_name: string
+          middle_name?: string | null
+          mrn?: string | null
+          patient_id_external?: string | null
+          suffix?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          date_of_birth?: string | null
+          first_name?: string
+          gender?: string | null
+          id?: string
+          last_name?: string
+          middle_name?: string | null
+          mrn?: string | null
+          patient_id_external?: string | null
+          suffix?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      pharmacies: {
+        Row: {
+          chain_pharmacy: string | null
+          created_at: string | null
+          id: string
+          nabp_number: number | null
+          npi_number: number | null
+          pharmacy_name: string
+          updated_at: string | null
+        }
+        Insert: {
+          chain_pharmacy?: string | null
+          created_at?: string | null
+          id?: string
+          nabp_number?: number | null
+          npi_number?: number | null
+          pharmacy_name: string
+          updated_at?: string | null
+        }
+        Update: {
+          chain_pharmacy?: string | null
+          created_at?: string | null
+          id?: string
+          nabp_number?: number | null
+          npi_number?: number | null
+          pharmacy_name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      prescribers: {
+        Row: {
+          created_at: string | null
+          dea_number: string | null
+          first_name: string | null
+          id: string
+          last_name: string
+          middle_name: string | null
+          npi: number | null
+          suffix: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          dea_number?: string | null
+          first_name?: string | null
+          id?: string
+          last_name: string
+          middle_name?: string | null
+          npi?: number | null
+          suffix?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          dea_number?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string
+          middle_name?: string | null
+          npi?: number | null
+          suffix?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
