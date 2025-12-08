@@ -716,6 +716,13 @@ export type Database = {
         }
         Relationships: []
       }
+      claims_filter_options: {
+        Row: {
+          filter_type: string | null
+          filter_value: string | null
+        }
+        Relationships: []
+      }
       drug_adherence_summary: {
         Row: {
           avg_340b_cost_per_claim: number | null
