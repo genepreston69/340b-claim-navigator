@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, subMonths, startOfMonth, endOfMonth, startOfWeek, subWeeks, differenceInDays } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, differenceInDays } from "date-fns";
 import { Receipt, DollarSign, AlertTriangle, Building2, CalendarIcon } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatsCard } from "@/components/dashboard/StatsCard";
@@ -28,6 +28,8 @@ import { Tables } from "@/integrations/supabase/types";
 
 type Claim = Tables<"claims">;
 type AdjudicationStatus = Tables<"adjudication_status">;
+type MonthlyFinancialSummary = Tables<"monthly_financial_summary">;
+type MonthlyPayerSummary = Tables<"monthly_payer_summary">;
 
 const Index = () => {
   const [dateRange, setDateRange] = useState<"1m" | "3m" | "6m" | "1y">("3m");
@@ -67,16 +69,50 @@ const Index = () => {
   const currentMonthStart = startOfMonth(new Date());
   const currentMonthEnd = endOfMonth(new Date());
 
-  // Fetch claims data
-  const { data: claims, isLoading: claimsLoading } = useQuery({
-    queryKey: ["dashboard-claims", dateFrom.toISOString(), dateTo.toISOString()],
+  // Fetch monthly financial summary for chart and metrics
+  const { data: monthlyData, isLoading: monthlyLoading } = useQuery({
+    queryKey: ["dashboard-monthly-summary", dateFrom.toISOString(), dateTo.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("monthly_financial_summary")
+        .select("*")
+        .gte("month", format(dateFrom, "yyyy-MM-dd"))
+        .lte("month", format(dateTo, "yyyy-MM-dd"))
+        .order("month", { ascending: true });
+      
+      if (error) throw error;
+      return data as MonthlyFinancialSummary[];
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  // Fetch monthly payer summary for payer breakdown
+  const { data: payerData, isLoading: payerLoading } = useQuery({
+    queryKey: ["dashboard-payer-summary", dateFrom.toISOString(), dateTo.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("monthly_payer_summary")
+        .select("*")
+        .gte("month", format(dateFrom, "yyyy-MM-dd"))
+        .lte("month", format(dateTo, "yyyy-MM-dd"));
+      
+      if (error) throw error;
+      return data as MonthlyPayerSummary[];
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  // Fetch recent claims (limited to 10)
+  const { data: recentClaims, isLoading: recentClaimsLoading } = useQuery({
+    queryKey: ["dashboard-recent-claims"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claims")
         .select("*")
-        .gte("fill_date", format(dateFrom, "yyyy-MM-dd"))
-        .lte("fill_date", format(dateTo, "yyyy-MM-dd"))
-        .order("fill_date", { ascending: false });
+        .order("fill_date", { ascending: false })
+        .limit(10);
       
       if (error) throw error;
       return data as Claim[];
@@ -85,7 +121,26 @@ const Index = () => {
     refetchOnMount: true,
   });
 
-  // Fetch adjudication status
+  // Fetch top pharmacy this month
+  const { data: topPharmacyData } = useQuery({
+    queryKey: ["dashboard-top-pharmacy", currentMonthStart.toISOString()],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("monthly_pharmacy_summary")
+        .select("pharmacy_name, total_claims")
+        .gte("month", format(currentMonthStart, "yyyy-MM-dd"))
+        .lte("month", format(currentMonthEnd, "yyyy-MM-dd"))
+        .order("total_claims", { ascending: false })
+        .limit(1);
+      
+      if (error) throw error;
+      return data?.[0] || null;
+    },
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  // Fetch adjudication status (limited for alerts)
   const { data: adjudicationData, isLoading: adjudicationLoading } = useQuery({
     queryKey: ["dashboard-adjudication"],
     queryFn: async () => {
@@ -100,9 +155,9 @@ const Index = () => {
     refetchOnMount: true,
   });
 
-  // Calculate metrics
+  // Calculate metrics from monthly summary
   const metrics = useMemo(() => {
-    if (!claims) {
+    if (!monthlyData) {
       return {
         claimsThisMonth: 0,
         savings340B: 0,
@@ -110,36 +165,19 @@ const Index = () => {
       };
     }
 
-    // Claims this month
-    const thisMonthClaims = claims.filter(c => {
-      if (!c.fill_date) return false;
-      const fillDate = new Date(c.fill_date);
-      return fillDate >= currentMonthStart && fillDate <= currentMonthEnd;
-    });
-
-    // 340B Savings
-    const savings = claims.reduce((sum, c) => {
-      const retail = c.retail_drug_cost || 0;
-      const cost340b = c.drug_cost_340b || 0;
-      return sum + (retail - cost340b);
-    }, 0);
-
-    // Top pharmacy this month
-    const pharmacyCounts: Record<string, number> = {};
-    thisMonthClaims.forEach(c => {
-      if (c.pharmacy_name) {
-        pharmacyCounts[c.pharmacy_name] = (pharmacyCounts[c.pharmacy_name] || 0) + 1;
-      }
-    });
-    const topPharmacy = Object.entries(pharmacyCounts)
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A";
+    // Current month data
+    const currentMonthStr = format(currentMonthStart, "yyyy-MM");
+    const thisMonthData = monthlyData.find(m => m.month && m.month.startsWith(currentMonthStr));
+    
+    // Total 340B Savings across date range
+    const savings = monthlyData.reduce((sum, m) => sum + (m.gross_savings || 0), 0);
 
     return {
-      claimsThisMonth: thisMonthClaims.length,
+      claimsThisMonth: thisMonthData?.total_claims || 0,
       savings340B: savings,
-      topPharmacy,
+      topPharmacy: topPharmacyData?.pharmacy_name || "N/A",
     };
-  }, [claims, currentMonthStart, currentMonthEnd]);
+  }, [monthlyData, currentMonthStart, topPharmacyData]);
 
   // Scripts pending (not complete)
   const scriptsPending = useMemo(() => {
@@ -165,54 +203,30 @@ const Index = () => {
       .slice(0, 10);
   }, [adjudicationData]);
 
-  // Weekly claims volume data
-  const weeklyVolumeData = useMemo(() => {
-    if (!claims) return [];
+  // Monthly claims volume data for chart
+  const monthlyVolumeData = useMemo(() => {
+    if (!monthlyData) return [];
+    return monthlyData.map(m => ({
+      week: m.month ? format(new Date(m.month), "MMM yyyy") : "",
+      count: Number(m.total_claims) || 0,
+    }));
+  }, [monthlyData]);
 
-    const weeks: Record<string, number> = {};
-    
-    // Generate week labels for last 12 weeks
-    for (let i = 11; i >= 0; i--) {
-      const weekStart = startOfWeek(subWeeks(new Date(), i));
-      const label = format(weekStart, "MMM d");
-      weeks[label] = 0;
-    }
-
-    // Count claims per week
-    claims.forEach(c => {
-      if (!c.fill_date) return;
-      const fillDate = new Date(c.fill_date);
-      const weekStart = startOfWeek(fillDate);
-      const label = format(weekStart, "MMM d");
-      if (weeks[label] !== undefined) {
-        weeks[label]++;
-      }
-    });
-
-    return Object.entries(weeks).map(([week, count]) => ({ week, count }));
-  }, [claims]);
-
-  // Payer breakdown data
+  // Payer breakdown data (aggregated across months)
   const payerBreakdownData = useMemo(() => {
-    if (!claims) return [];
+    if (!payerData) return [];
 
-    const payerCounts: Record<string, number> = {};
-    claims.forEach(c => {
-      const payer = c.reason || "Unknown";
-      payerCounts[payer] = (payerCounts[payer] || 0) + 1;
+    const payerTotals: Record<string, number> = {};
+    payerData.forEach(p => {
+      const payer = p.payer_type || "Unknown";
+      payerTotals[payer] = (payerTotals[payer] || 0) + Number(p.claim_count || 0);
     });
 
-    return Object.entries(payerCounts)
+    return Object.entries(payerTotals)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
       .map(([name, value]) => ({ name, value, color: "" }));
-  }, [claims]);
-
-  // Recent claims (last 10)
-  const recentClaims = useMemo(() => {
-    if (!claims) return [];
-    return claims.slice(0, 10);
-  }, [claims]);
+  }, [payerData]);
 
   return (
     <DashboardLayout>
@@ -333,20 +347,20 @@ const Index = () => {
         {/* Row 2: Charts */}
         <div className="grid gap-6 lg:grid-cols-5">
           <ClaimsVolumeChart 
-            data={weeklyVolumeData} 
-            isLoading={claimsLoading} 
+            data={monthlyVolumeData} 
+            isLoading={monthlyLoading} 
           />
           <PayerBreakdownChart 
             data={payerBreakdownData} 
-            isLoading={claimsLoading} 
+            isLoading={payerLoading} 
           />
         </div>
 
         {/* Row 3: Tables */}
         <div className="grid gap-6 lg:grid-cols-2">
           <RecentClaimsTable 
-            claims={recentClaims} 
-            isLoading={claimsLoading} 
+            claims={recentClaims || []} 
+            isLoading={recentClaimsLoading} 
           />
           <AdjudicationAlerts 
             alerts={adjudicationAlerts} 
