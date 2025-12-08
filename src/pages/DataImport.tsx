@@ -16,7 +16,10 @@ import {
 import { cn } from "@/lib/utils";
 import { parseScriptsFile, ParseProgress } from "@/utils/scriptsParser";
 import { parseClaimsFile, ClaimParseProgress } from "@/utils/claimsParser";
+import { processScriptsImport, processClaimsImport, ImportSummary } from "@/utils/etlProcessor";
+import { ImportSummaryModal } from "@/components/import/ImportSummaryModal";
 import { useToast } from "@/hooks/use-toast";
+
 interface ImportHistoryItem {
   id: string;
   importDate: string;
@@ -266,62 +269,144 @@ const DataImport = () => {
   const [claimsProgress, setClaimsProgress] = useState<ParseProgress | null>(null);
   const [isProcessingScripts, setIsProcessingScripts] = useState(false);
   const [isProcessingClaims, setIsProcessingClaims] = useState(false);
+  
+  // Import summary modal state
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [summaryFileType, setSummaryFileType] = useState<"Scripts" | "Claims">("Scripts");
+  const [summaryFileName, setSummaryFileName] = useState("");
 
   const handleProcessScripts = async () => {
     if (!scriptsFile) return;
 
+    const fileName = scriptsFile.name;
     setIsProcessingScripts(true);
     setScriptsProgress(null);
 
     try {
-      const prescriptions = await parseScriptsFile(scriptsFile, setScriptsProgress);
+      // Step 1: Parse the Excel file
+      setScriptsProgress({
+        current: 0,
+        total: 0,
+        percentage: 0,
+        status: "reading",
+        message: "Parsing Excel file...",
+      });
       
-      toast({
-        title: "Scripts Parsed Successfully",
-        description: `Parsed ${prescriptions.length.toLocaleString()} prescription records from ${scriptsFile.name}`,
+      const prescriptions = await parseScriptsFile(scriptsFile, (progress) => {
+        // Scale parsing progress to 0-30%
+        setScriptsProgress({
+          ...progress,
+          percentage: Math.floor(progress.percentage * 0.3),
+          message: progress.message,
+        });
       });
 
-      console.log("Parsed prescriptions:", prescriptions);
-      // TODO: Save to database
+      if (prescriptions.length === 0) {
+        toast({
+          title: "No Records Found",
+          description: "The file contains no valid prescription records to import.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Step 2: Process ETL (upsert reference data + insert prescriptions)
+      const summary = await processScriptsImport(prescriptions, (message, pct) => {
+        // Scale ETL progress to 30-100%
+        const scaledPct = 30 + Math.floor(pct * 0.7);
+        setScriptsProgress({
+          current: 0,
+          total: prescriptions.length,
+          percentage: scaledPct,
+          status: "parsing",
+          message,
+        });
+      });
+
+      // Show summary modal
+      setImportSummary(summary);
+      setSummaryFileType("Scripts");
+      setSummaryFileName(fileName);
+      setSummaryModalOpen(true);
       
       setScriptsFile(null);
     } catch (error) {
       toast({
-        title: "Error Parsing Scripts",
-        description: error instanceof Error ? error.message : "Failed to parse the Excel file",
+        title: "Error Processing Scripts",
+        description: error instanceof Error ? error.message : "Failed to process the Excel file",
         variant: "destructive",
       });
     } finally {
       setIsProcessingScripts(false);
+      setScriptsProgress(null);
     }
   };
 
   const handleProcessClaims = async () => {
     if (!claimsFile) return;
 
+    const fileName = claimsFile.name;
     setIsProcessingClaims(true);
     setClaimsProgress(null);
 
     try {
-      const claims = await parseClaimsFile(claimsFile, setClaimsProgress);
-      
-      toast({
-        title: "Claims Parsed Successfully",
-        description: `Parsed ${claims.length.toLocaleString()} claim records from ${claimsFile.name}`,
+      // Step 1: Parse the CSV file
+      setClaimsProgress({
+        current: 0,
+        total: 0,
+        percentage: 0,
+        status: "reading",
+        message: "Parsing CSV file...",
       });
 
-      console.log("Parsed claims:", claims);
-      // TODO: Save to database
+      const claims = await parseClaimsFile(claimsFile, (progress) => {
+        // Scale parsing progress to 0-30%
+        setClaimsProgress({
+          ...progress,
+          percentage: Math.floor(progress.percentage * 0.3),
+          message: progress.message,
+        });
+      });
+
+      if (claims.length === 0) {
+        toast({
+          title: "No Records Found",
+          description: "The file contains no valid claim records to import.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Step 2: Process ETL (upsert reference data + insert claims)
+      const summary = await processClaimsImport(claims, (message, pct) => {
+        // Scale ETL progress to 30-100%
+        const scaledPct = 30 + Math.floor(pct * 0.7);
+        setClaimsProgress({
+          current: 0,
+          total: claims.length,
+          percentage: scaledPct,
+          status: "parsing",
+          message,
+        });
+      });
+
+      // Show summary modal
+      setImportSummary(summary);
+      setSummaryFileType("Claims");
+      setSummaryFileName(fileName);
+      setSummaryModalOpen(true);
       
       setClaimsFile(null);
     } catch (error) {
       toast({
-        title: "Error Parsing Claims",
-        description: error instanceof Error ? error.message : "Failed to parse the CSV file",
+        title: "Error Processing Claims",
+        description: error instanceof Error ? error.message : "Failed to process the CSV file",
         variant: "destructive",
       });
     } finally {
       setIsProcessingClaims(false);
+      setClaimsProgress(null);
     }
   };
 
@@ -416,6 +501,15 @@ const DataImport = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Import Summary Modal */}
+      <ImportSummaryModal
+        open={summaryModalOpen}
+        onOpenChange={setSummaryModalOpen}
+        summary={importSummary}
+        fileType={summaryFileType}
+        fileName={summaryFileName}
+      />
     </DashboardLayout>
   );
 };
