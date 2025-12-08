@@ -240,13 +240,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "claims_pharmacy_id_fkey"
-            columns: ["pharmacy_id"]
-            isOneToOne: false
-            referencedRelation: "pharmacy_contract_compliance"
-            referencedColumns: ["pharmacy_id"]
-          },
-          {
             foreignKeyName: "claims_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
@@ -694,13 +687,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "prescriptions_pharmacy_id_fkey"
-            columns: ["pharmacy_id"]
-            isOneToOne: false
-            referencedRelation: "pharmacy_contract_compliance"
-            referencedColumns: ["pharmacy_id"]
-          },
-          {
             foreignKeyName: "prescriptions_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
@@ -873,13 +859,6 @@ export type Database = {
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "claims_pharmacy_id_fkey"
-            columns: ["pharmacy_id"]
-            isOneToOne: false
-            referencedRelation: "pharmacy_contract_compliance"
-            referencedColumns: ["pharmacy_id"]
-          },
         ]
       }
       monthly_adherence_trends: {
@@ -951,13 +930,6 @@ export type Database = {
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "claims_pharmacy_id_fkey"
-            columns: ["pharmacy_id"]
-            isOneToOne: false
-            referencedRelation: "pharmacy_contract_compliance"
-            referencedColumns: ["pharmacy_id"]
-          },
         ]
       }
       pharmacy_contract_compliance: {
@@ -987,7 +959,15 @@ export type Database = {
           unique_drugs_dispensed: number | null
           unique_prescribers_served: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       physician_capture_rates: {
         Row: {
@@ -1065,13 +1045,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "pharmacies"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "claims_pharmacy_id_fkey"
-            columns: ["pharmacy_id"]
-            isOneToOne: false
-            referencedRelation: "pharmacy_contract_compliance"
-            referencedColumns: ["pharmacy_id"]
           },
           {
             foreignKeyName: "claims_prescriber_id_fkey"
