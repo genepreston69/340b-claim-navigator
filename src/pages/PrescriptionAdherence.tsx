@@ -351,7 +351,7 @@ export default function PrescriptionAdherence() {
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Prescriptions</CardTitle>
@@ -384,21 +384,6 @@ export default function PrescriptionAdherence() {
             <CardContent>
               <div className="text-2xl font-bold">{metrics.avgDaysToFill.toFixed(1)} days</div>
               <p className="text-xs text-muted-foreground">Time from prescribed to filled</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Never Filled</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {metrics.neverFilled.toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {metrics.total > 0 ? `${((metrics.neverFilled / metrics.total) * 100).toFixed(1)}% of total` : "0% of total"}
-              </p>
             </CardContent>
           </Card>
         </div>
