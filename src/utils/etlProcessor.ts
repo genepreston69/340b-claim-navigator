@@ -337,58 +337,76 @@ async function upsertPharmaciesFromScripts(
 
   if (uniquePharmacies.size === 0) return { created: 0, errors };
 
-  let created = 0;
+  try {
+    // Batch fetch all existing pharmacies at once
+    const { data: existingPharmacies, error: fetchError } = await supabase
+      .from("pharmacies")
+      .select("id, pharmacy_name, npi_number, nabp_number");
 
-  for (const [key, pharmacy] of uniquePharmacies) {
-    try {
-      // Try to find by NPI first, then NABP, then name
-      let existing = null;
-      
+    if (fetchError) throw fetchError;
+
+    // Build lookup maps for existing pharmacies
+    const existingByNpi = new Map<number, string>();
+    const existingByNabp = new Map<number, string>();
+    const existingByName = new Map<string, string>();
+
+    existingPharmacies?.forEach((p) => {
+      if (p.npi_number) existingByNpi.set(p.npi_number, p.id);
+      if (p.nabp_number) existingByNabp.set(p.nabp_number, p.id);
+      existingByName.set(p.pharmacy_name.toLowerCase(), p.id);
+    });
+
+    // Separate existing from new pharmacies
+    const toInsert: { pharmacy_name: string; npi_number: number | null; nabp_number: number | null }[] = [];
+
+    for (const [key, pharmacy] of uniquePharmacies) {
+      let existingId: string | undefined;
+
       if (pharmacy.npi) {
-        const { data } = await supabase
-          .from("pharmacies")
-          .select("id")
-          .eq("npi_number", pharmacy.npi)
-          .maybeSingle();
-        existing = data;
+        existingId = existingByNpi.get(pharmacy.npi);
       }
-      
-      if (!existing && pharmacy.nabp) {
-        const { data } = await supabase
-          .from("pharmacies")
-          .select("id")
-          .eq("nabp_number", pharmacy.nabp)
-          .maybeSingle();
-        existing = data;
+      if (!existingId && pharmacy.nabp) {
+        existingId = existingByNabp.get(pharmacy.nabp);
       }
 
-      if (existing) {
-        cache.pharmacies.set(key, existing.id);
+      if (existingId) {
+        cache.pharmacies.set(key, existingId);
       } else {
-        const { data: inserted, error } = await supabase
-          .from("pharmacies")
-          .insert({
-            pharmacy_name: pharmacy.name,
-            npi_number: pharmacy.npi,
-            nabp_number: pharmacy.nabp,
-          })
-          .select("id")
-          .single();
-
-        if (error) throw error;
-        cache.pharmacies.set(key, inserted.id);
-        created++;
+        toInsert.push({
+          pharmacy_name: pharmacy.name,
+          npi_number: pharmacy.npi,
+          nabp_number: pharmacy.nabp,
+        });
       }
-    } catch (error) {
-      errors.push({
-        row: 0,
-        field: "pharmacy",
-        message: `Failed to upsert pharmacy ${pharmacy.name}: ${error}`,
-      });
     }
-  }
 
-  return { created, errors };
+    // Batch insert new pharmacies
+    if (toInsert.length > 0) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("pharmacies")
+        .insert(toInsert)
+        .select("id, pharmacy_name, npi_number, nabp_number");
+
+      if (insertError) throw insertError;
+
+      // Add newly inserted to cache
+      inserted?.forEach((p) => {
+        const key = generatePharmacyKey(p.pharmacy_name, p.npi_number, p.nabp_number);
+        cache.pharmacies.set(key, p.id);
+      });
+
+      return { created: toInsert.length, errors };
+    }
+
+    return { created: 0, errors };
+  } catch (error) {
+    errors.push({
+      row: 0,
+      field: "pharmacy",
+      message: `Failed to upsert pharmacies: ${error}`,
+    });
+    return { created: 0, errors };
+  }
 }
 
 async function upsertPrescribersFromScripts(
@@ -947,60 +965,71 @@ async function upsertPharmaciesFromClaims(
 
   if (uniquePharmacies.size === 0) return { created: 0, errors };
 
-  let created = 0;
+  try {
+    // Batch fetch all existing pharmacies at once
+    const { data: existingPharmacies, error: fetchError } = await supabase
+      .from("pharmacies")
+      .select("id, pharmacy_name, npi_number, nabp_number");
 
-  for (const [key, pharmacy] of uniquePharmacies) {
-    try {
-      let existing = null;
+    if (fetchError) throw fetchError;
+
+    // Build lookup maps for existing pharmacies
+    const existingByNpi = new Map<number, string>();
+    const existingByNabp = new Map<number, string>();
+
+    existingPharmacies?.forEach((p) => {
+      if (p.npi_number) existingByNpi.set(p.npi_number, p.id);
+      if (p.nabp_number) existingByNabp.set(p.nabp_number, p.id);
+    });
+
+    // Separate existing from new pharmacies
+    const toInsert: { pharmacy_name: string; chain_pharmacy: string | null; npi_number: number | null }[] = [];
+
+    for (const [key, pharmacy] of uniquePharmacies) {
+      let existingId: string | undefined;
 
       if (pharmacy.nabp_npi) {
-        // Try NPI first
-        const { data: npiMatch } = await supabase
-          .from("pharmacies")
-          .select("id")
-          .eq("npi_number", pharmacy.nabp_npi)
-          .maybeSingle();
-        
-        if (npiMatch) {
-          existing = npiMatch;
-        } else {
-          // Try NABP
-          const { data: nabpMatch } = await supabase
-            .from("pharmacies")
-            .select("id")
-            .eq("nabp_number", pharmacy.nabp_npi)
-            .maybeSingle();
-          existing = nabpMatch;
-        }
+        existingId = existingByNpi.get(pharmacy.nabp_npi) || existingByNabp.get(pharmacy.nabp_npi);
       }
 
-      if (existing) {
-        cache.pharmacies.set(key, existing.id);
+      if (existingId) {
+        cache.pharmacies.set(key, existingId);
       } else {
-        const { data: inserted, error } = await supabase
-          .from("pharmacies")
-          .insert({
-            pharmacy_name: pharmacy.name,
-            chain_pharmacy: pharmacy.chain,
-            npi_number: pharmacy.nabp_npi,
-          })
-          .select("id")
-          .single();
-
-        if (error) throw error;
-        cache.pharmacies.set(key, inserted.id);
-        created++;
+        toInsert.push({
+          pharmacy_name: pharmacy.name,
+          chain_pharmacy: pharmacy.chain,
+          npi_number: pharmacy.nabp_npi,
+        });
       }
-    } catch (error) {
-      errors.push({
-        row: 0,
-        field: "pharmacy",
-        message: `Failed to upsert pharmacy ${pharmacy.name}: ${error}`,
-      });
     }
-  }
 
-  return { created, errors };
+    // Batch insert new pharmacies
+    if (toInsert.length > 0) {
+      const { data: inserted, error: insertError } = await supabase
+        .from("pharmacies")
+        .insert(toInsert)
+        .select("id, pharmacy_name, npi_number, nabp_number");
+
+      if (insertError) throw insertError;
+
+      // Add newly inserted to cache
+      inserted?.forEach((p) => {
+        const key = generatePharmacyKey(p.pharmacy_name, p.npi_number, p.nabp_number);
+        cache.pharmacies.set(key, p.id);
+      });
+
+      return { created: toInsert.length, errors };
+    }
+
+    return { created: 0, errors };
+  } catch (error) {
+    errors.push({
+      row: 0,
+      field: "pharmacy",
+      message: `Failed to upsert pharmacies: ${error}`,
+    });
+    return { created: 0, errors };
+  }
 }
 
 async function upsertPrescribersFromClaims(
