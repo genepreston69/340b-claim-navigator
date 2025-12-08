@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useDebounce } from "use-debounce";
 import { 
   Search, 
   Filter, 
@@ -70,6 +71,10 @@ const Claims = () => {
   const [patientSearch, setPatientSearch] = useState("");
   const [rxNumberSearch, setRxNumberSearch] = useState("");
   
+  // Debounced search values
+  const [debouncedDrugSearch] = useDebounce(drugSearch, 300);
+  const [debouncedPatientSearch] = useDebounce(patientSearch, 300);
+  
   // Table states
   const [sortField, setSortField] = useState<SortField>("fill_date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -79,122 +84,128 @@ const Claims = () => {
   // Get prescription filter from URL
   const rxFilter = searchParams.get("rx");
 
-  // Fetch claims data
-  const { data: claims, isLoading, error } = useQuery({
-    queryKey: ["claims-full"],
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateFrom, dateTo, pharmacyFilter, claimTypeFilter, reasonFilter, debouncedDrugSearch, debouncedPatientSearch, rxNumberSearch, rxFilter, sortField, sortDirection]);
+
+  // Fetch filter options from the full dataset
+  const { data: filterOptions } = useQuery({
+    queryKey: ["claims-filter-options"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("claims")
-        .select("*")
-        .order("fill_date", { ascending: false })
-        .limit(5000);
+        .from("claims_filter_options")
+        .select("*");
       
       if (error) throw error;
-      return data as Claim[];
+      
+      const pharmacies: string[] = [];
+      const claimTypes: string[] = [];
+      const reasons: string[] = [];
+      
+      (data || []).forEach((row: { filter_type: string; filter_value: string | null }) => {
+        if (row.filter_value) {
+          switch (row.filter_type) {
+            case "pharmacy":
+              pharmacies.push(row.filter_value);
+              break;
+            case "claim_type":
+              claimTypes.push(row.filter_value);
+              break;
+            case "reason":
+              reasons.push(row.filter_value);
+              break;
+          }
+        }
+      });
+      
+      return { pharmacies, claimTypes, reasons };
     },
   });
 
-  // Get unique values for filters
-  const filterOptions = useMemo(() => {
-    if (!claims) return { pharmacies: [], claimTypes: [], reasons: [] };
-    
-    return {
-      pharmacies: [...new Set(claims.map(c => c.pharmacy_name).filter(Boolean))].sort() as string[],
-      claimTypes: [...new Set(claims.map(c => c.claim_type).filter(Boolean))].sort() as string[],
-      reasons: [...new Set(claims.map(c => c.reason).filter(Boolean))].sort() as string[],
-    };
-  }, [claims]);
+  // Fetch claims with server-side pagination and filtering
+  const { data: claimsResult, isLoading, error } = useQuery({
+    queryKey: [
+      "claims-paginated",
+      currentPage,
+      pageSize,
+      sortField,
+      sortDirection,
+      dateFrom?.toISOString(),
+      dateTo?.toISOString(),
+      pharmacyFilter,
+      claimTypeFilter,
+      reasonFilter,
+      debouncedDrugSearch,
+      debouncedPatientSearch,
+      rxNumberSearch,
+      rxFilter
+    ],
+    queryFn: async () => {
+      let query = supabase
+        .from("claims")
+        .select("*", { count: "exact" });
 
-  // Filter and sort data
-  const filteredData = useMemo(() => {
-    if (!claims) return [];
-
-    let filtered = claims;
-
-    // URL Rx filter
-    if (rxFilter) {
-      filtered = filtered.filter(c => c.prescription_number?.toString() === rxFilter);
-    }
-
-    // Date range filter
-    if (dateFrom) {
-      filtered = filtered.filter(c => {
-        if (!c.fill_date) return false;
-        return new Date(c.fill_date) >= dateFrom;
-      });
-    }
-    if (dateTo) {
-      filtered = filtered.filter(c => {
-        if (!c.fill_date) return false;
-        return new Date(c.fill_date) <= dateTo;
-      });
-    }
-
-    // Pharmacy filter
-    if (pharmacyFilter !== "all") {
-      filtered = filtered.filter(c => c.pharmacy_name === pharmacyFilter);
-    }
-
-    // Claim type filter
-    if (claimTypeFilter !== "all") {
-      filtered = filtered.filter(c => c.claim_type === claimTypeFilter);
-    }
-
-    // Reason filter
-    if (reasonFilter !== "all") {
-      filtered = filtered.filter(c => c.reason === reasonFilter);
-    }
-
-    // Drug search
-    if (drugSearch) {
-      const query = drugSearch.toLowerCase();
-      filtered = filtered.filter(c => c.drug_name?.toLowerCase().includes(query));
-    }
-
-    // Patient search
-    if (patientSearch) {
-      const query = patientSearch.toLowerCase();
-      filtered = filtered.filter(c => 
-        c.first_name?.toLowerCase().includes(query) ||
-        c.last_name?.toLowerCase().includes(query)
-      );
-    }
-
-    // Rx number exact search
-    if (rxNumberSearch) {
-      filtered = filtered.filter(c => c.prescription_number?.toString() === rxNumberSearch);
-    }
-
-    // Sort
-    filtered.sort((a, b) => {
-      let aVal = a[sortField];
-      let bVal = b[sortField];
-
-      if (aVal === null || aVal === undefined) return 1;
-      if (bVal === null || bVal === undefined) return -1;
-
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortDirection === "asc" 
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
+      // Apply filters
+      if (rxFilter) {
+        query = query.eq("prescription_number", parseInt(rxFilter));
+      }
+      
+      if (rxNumberSearch) {
+        query = query.eq("prescription_number", parseInt(rxNumberSearch));
       }
 
-      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
+      if (dateFrom) {
+        query = query.gte("fill_date", format(dateFrom, "yyyy-MM-dd"));
+      }
+      
+      if (dateTo) {
+        query = query.lte("fill_date", format(dateTo, "yyyy-MM-dd"));
+      }
 
-    return filtered;
-  }, [claims, rxFilter, dateFrom, dateTo, pharmacyFilter, claimTypeFilter, reasonFilter, drugSearch, patientSearch, rxNumberSearch, sortField, sortDirection]);
+      if (pharmacyFilter !== "all") {
+        query = query.eq("pharmacy_name", pharmacyFilter);
+      }
 
-  // Pagination
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    const end = start + pageSize;
-    return filteredData.slice(start, end);
-  }, [filteredData, currentPage, pageSize]);
+      if (claimTypeFilter !== "all") {
+        query = query.eq("claim_type", claimTypeFilter);
+      }
 
-  const totalPages = Math.ceil(filteredData.length / pageSize);
+      if (reasonFilter !== "all") {
+        query = query.eq("reason", reasonFilter);
+      }
+
+      if (debouncedDrugSearch) {
+        query = query.ilike("drug_name", `%${debouncedDrugSearch}%`);
+      }
+
+      if (debouncedPatientSearch) {
+        // Search in both first_name and last_name using OR
+        query = query.or(`first_name.ilike.%${debouncedPatientSearch}%,last_name.ilike.%${debouncedPatientSearch}%`);
+      }
+
+      // Apply sorting
+      query = query.order(sortField, { ascending: sortDirection === "asc", nullsFirst: false });
+
+      // Apply pagination
+      const from = (currentPage - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+      
+      if (error) throw error;
+      
+      return {
+        claims: data as Claim[],
+        totalCount: count || 0
+      };
+    },
+  });
+
+  const claims = claimsResult?.claims || [];
+  const totalCount = claimsResult?.totalCount || 0;
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -203,7 +214,6 @@ const Claims = () => {
       setSortField(field);
       setSortDirection("asc");
     }
-    setCurrentPage(1);
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -224,7 +234,6 @@ const Claims = () => {
     setRxNumberSearch("");
     searchParams.delete("rx");
     setSearchParams(searchParams);
-    setCurrentPage(1);
   };
 
   const clearRxFilter = () => {
@@ -234,48 +243,99 @@ const Claims = () => {
 
   const hasActiveFilters = dateFrom || dateTo || pharmacyFilter !== "all" || claimTypeFilter !== "all" || reasonFilter !== "all" || drugSearch || patientSearch || rxNumberSearch || rxFilter;
 
-  // Export to CSV
-  const handleExportCSV = () => {
-    if (filteredData.length === 0) {
-      toast({ title: "No data to export", variant: "destructive" });
-      return;
+  // Export to CSV - fetches all filtered data
+  const handleExportCSV = async () => {
+    const exportLimit = 10000;
+    
+    toast({ title: "Preparing export...", description: "Fetching data..." });
+
+    try {
+      let query = supabase
+        .from("claims")
+        .select("*");
+
+      // Apply same filters as the main query
+      if (rxFilter) {
+        query = query.eq("prescription_number", parseInt(rxFilter));
+      }
+      if (rxNumberSearch) {
+        query = query.eq("prescription_number", parseInt(rxNumberSearch));
+      }
+      if (dateFrom) {
+        query = query.gte("fill_date", format(dateFrom, "yyyy-MM-dd"));
+      }
+      if (dateTo) {
+        query = query.lte("fill_date", format(dateTo, "yyyy-MM-dd"));
+      }
+      if (pharmacyFilter !== "all") {
+        query = query.eq("pharmacy_name", pharmacyFilter);
+      }
+      if (claimTypeFilter !== "all") {
+        query = query.eq("claim_type", claimTypeFilter);
+      }
+      if (reasonFilter !== "all") {
+        query = query.eq("reason", reasonFilter);
+      }
+      if (debouncedDrugSearch) {
+        query = query.ilike("drug_name", `%${debouncedDrugSearch}%`);
+      }
+      if (debouncedPatientSearch) {
+        query = query.or(`first_name.ilike.%${debouncedPatientSearch}%,last_name.ilike.%${debouncedPatientSearch}%`);
+      }
+
+      query = query.order(sortField, { ascending: sortDirection === "asc" }).limit(exportLimit);
+
+      const { data: exportData, error: exportError } = await query;
+
+      if (exportError) throw exportError;
+
+      if (!exportData || exportData.length === 0) {
+        toast({ title: "No data to export", variant: "destructive" });
+        return;
+      }
+
+      const headers = [
+        "Claim ID", "Rx #", "Refill #", "Fill Date", "Claim Date",
+        "Patient Name", "Drug Name", "NDC", "Pharmacy", "Qty",
+        "340B Cost", "Total Payment", "Reason", "Claim Type"
+      ];
+
+      const rows = exportData.map(c => [
+        c.claim_id || "",
+        c.prescription_number || "",
+        c.refill_number || "",
+        c.fill_date || "",
+        c.claim_date || "",
+        `${c.first_name || ""} ${c.last_name || ""}`.trim(),
+        c.drug_name || "",
+        c.ndc || "",
+        c.pharmacy_name || "",
+        c.qty_dispensed || "",
+        c.drug_cost_340b || "",
+        c.total_payment || "",
+        c.reason || "",
+        c.claim_type || ""
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `claims_export_${format(new Date(), "yyyy-MM-dd")}.csv`;
+      link.click();
+
+      const exportMsg = exportData.length >= exportLimit 
+        ? `Exported ${exportData.length.toLocaleString()} claims (limit reached)`
+        : `Exported ${exportData.length.toLocaleString()} claims`;
+      toast({ title: exportMsg });
+    } catch (err) {
+      console.error("Export error:", err);
+      toast({ title: "Export failed", variant: "destructive" });
     }
-
-    const headers = [
-      "Claim ID", "Rx #", "Refill #", "Fill Date", "Claim Date",
-      "Patient Name", "Drug Name", "NDC", "Pharmacy", "Qty",
-      "340B Cost", "Total Payment", "Reason", "Claim Type"
-    ];
-
-    const rows = filteredData.map(c => [
-      c.claim_id || "",
-      c.prescription_number || "",
-      c.refill_number || "",
-      c.fill_date || "",
-      c.claim_date || "",
-      `${c.first_name || ""} ${c.last_name || ""}`.trim(),
-      c.drug_name || "",
-      c.ndc || "",
-      c.pharmacy_name || "",
-      c.qty_dispensed || "",
-      c.drug_cost_340b || "",
-      c.total_payment || "",
-      c.reason || "",
-      c.claim_type || ""
-    ]);
-
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `claims_export_${format(new Date(), "yyyy-MM-dd")}.csv`;
-    link.click();
-
-    toast({ title: `Exported ${filteredData.length} claims to CSV` });
   };
 
   return (
@@ -402,7 +462,7 @@ const Claims = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Pharmacies</SelectItem>
-                      {filterOptions.pharmacies.map(p => (
+                      {filterOptions?.pharmacies.map(p => (
                         <SelectItem key={p} value={p}>{p}</SelectItem>
                       ))}
                     </SelectContent>
@@ -415,7 +475,7 @@ const Claims = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      {filterOptions.claimTypes.map(t => (
+                      {filterOptions?.claimTypes.map(t => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>
@@ -428,7 +488,7 @@ const Claims = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Reasons</SelectItem>
-                      {filterOptions.reasons.map(r => (
+                      {filterOptions?.reasons.map(r => (
                         <SelectItem key={r} value={r}>{r}</SelectItem>
                       ))}
                     </SelectContent>
@@ -477,7 +537,7 @@ const Claims = () => {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>
-                Claims ({filteredData.length.toLocaleString()})
+                Claims ({totalCount.toLocaleString()})
               </CardTitle>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Show:</span>
@@ -503,7 +563,7 @@ const Claims = () => {
               <div className="text-center py-8 text-destructive">
                 Error loading claims. Please try again.
               </div>
-            ) : filteredData.length === 0 ? (
+            ) : claims.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No claims found matching your filters.
               </div>
@@ -574,7 +634,7 @@ const Claims = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {paginatedData.map((claim) => (
+                      {claims.map((claim) => (
                         <TableRow 
                           key={claim.id} 
                           className="cursor-pointer hover:bg-muted/50"
@@ -635,7 +695,7 @@ const Claims = () => {
                 {/* Pagination */}
                 <div className="flex items-center justify-between mt-4">
                   <p className="text-sm text-muted-foreground">
-                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredData.length)} of {filteredData.length.toLocaleString()} claims
+                    Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount.toLocaleString()} claims
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
@@ -661,7 +721,7 @@ const Claims = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
+                      disabled={currentPage === totalPages || totalPages === 0}
                     >
                       Next
                     </Button>
@@ -669,7 +729,7 @@ const Claims = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
+                      disabled={currentPage === totalPages || totalPages === 0}
                     >
                       Last
                     </Button>
