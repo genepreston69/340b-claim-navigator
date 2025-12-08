@@ -6,10 +6,11 @@ import { Loader2 } from 'lucide-react';
 interface ProtectedRouteProps {
   children: ReactNode;
   requireAdmin?: boolean;
+  requireAnalyticsAccess?: boolean;
 }
 
-export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { user, loading, isAdmin, role } = useAuth();
+export function ProtectedRoute({ children, requireAdmin = false, requireAnalyticsAccess = false }: ProtectedRouteProps) {
+  const { user, loading, isAdmin, hasAnalyticsAccess } = useAuth();
 
   if (loading) {
     return (
@@ -25,6 +26,11 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
 
   // If admin is required but user is not admin
   if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  // If analytics access is required but user doesn't have it
+  if (requireAnalyticsAccess && !hasAnalyticsAccess) {
     return <Navigate to="/" replace />;
   }
 

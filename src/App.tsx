@@ -74,7 +74,7 @@ const App = () => (
             <Route
               path="/reports"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requireAnalyticsAccess>
                   <Reports />
                 </ProtectedRoute>
               }
@@ -82,7 +82,7 @@ const App = () => (
             <Route
               path="/prescription-adherence"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requireAnalyticsAccess>
                   <PrescriptionAdherence />
                 </ProtectedRoute>
               }
@@ -90,7 +90,7 @@ const App = () => (
             <Route
               path="/physician-capture-rates"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requireAnalyticsAccess>
                   <PhysicianCaptureRates />
                 </ProtectedRoute>
               }
@@ -98,7 +98,7 @@ const App = () => (
             <Route
               path="/drug-pharmacy-comparison"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requireAnalyticsAccess>
                   <DrugPharmacyComparison />
                 </ProtectedRoute>
               }
@@ -106,7 +106,7 @@ const App = () => (
             <Route
               path="/contract-compliance"
               element={
-                <ProtectedRoute requireAdmin>
+                <ProtectedRoute requireAnalyticsAccess>
                   <ContractCompliance />
                 </ProtectedRoute>
               }
