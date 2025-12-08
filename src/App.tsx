@@ -12,6 +12,7 @@ import Adjudication from "./pages/Adjudication";
 import Settings from "./pages/Settings";
 import DataImport from "./pages/DataImport";
 import Reports from "./pages/Reports";
+import UserManagement from "./pages/UserManagement";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -79,6 +80,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <UserManagement />
                 </ProtectedRoute>
               }
             />
