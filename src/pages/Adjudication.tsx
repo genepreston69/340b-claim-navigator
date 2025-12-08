@@ -22,13 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -39,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Tables } from "@/integrations/supabase/types";
 import { CalendarIcon } from "lucide-react";
+import { AdjudicationDetailDrawer } from "@/components/adjudication/AdjudicationDetailDrawer";
 
 type AdjudicationStatus = Tables<"adjudication_status">;
 type SortField = "prescribed_date" | "patient_name" | "medication_name" | "fills_adjudicated" | "fills_remaining" | "adjudication_status";
@@ -482,111 +476,11 @@ const Adjudication = () => {
         </Card>
       </div>
 
-      {/* Detail Sheet */}
-      <Sheet open={!!selectedRow} onOpenChange={() => setSelectedRow(null)}>
-        <SheetContent className="sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Prescription Details</SheetTitle>
-            <SheetDescription>
-              Complete adjudication information
-            </SheetDescription>
-          </SheetHeader>
-          
-          {selectedRow && (
-            <div className="mt-6 space-y-6">
-              {/* Status Badge */}
-              <div className="flex justify-center">
-                <Badge 
-                  variant="outline" 
-                  className={cn(
-                    "text-lg px-4 py-2",
-                    statusColors[selectedRow.adjudication_status || "Never Filled"]?.bg,
-                    statusColors[selectedRow.adjudication_status || "Never Filled"]?.text,
-                    statusColors[selectedRow.adjudication_status || "Never Filled"]?.border
-                  )}
-                >
-                  {selectedRow.adjudication_status}
-                </Badge>
-              </div>
-
-              {/* Patient Info */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-foreground">Patient Information</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-muted-foreground">Name</div>
-                  <div className="font-medium">{selectedRow.patient_name || "-"}</div>
-                  <div className="text-muted-foreground">MRN</div>
-                  <div className="font-medium">{selectedRow.patient_mrn || "-"}</div>
-                </div>
-              </div>
-
-              {/* Prescription Info */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-foreground">Prescription Information</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-muted-foreground">Rx Number</div>
-                  <div className="font-medium">{selectedRow.prescription_identifier || "-"}</div>
-                  <div className="text-muted-foreground">Prescribed Date</div>
-                  <div className="font-medium">
-                    {selectedRow.prescribed_date ? format(new Date(selectedRow.prescribed_date), "MMM d, yyyy") : "-"}
-                  </div>
-                  <div className="text-muted-foreground">Medication</div>
-                  <div className="font-medium">{selectedRow.medication_name || "-"}</div>
-                  <div className="text-muted-foreground">NDC</div>
-                  <div className="font-medium">{selectedRow.ndc_code || "-"}</div>
-                  <div className="text-muted-foreground">Quantity</div>
-                  <div className="font-medium">{selectedRow.dispense_quantity || "-"}</div>
-                  <div className="text-muted-foreground">Days Supply</div>
-                  <div className="font-medium">{selectedRow.days_supply || "-"}</div>
-                  <div className="text-muted-foreground">Refills Authorized</div>
-                  <div className="font-medium">{selectedRow.refills_authorized ?? 0}</div>
-                </div>
-              </div>
-
-              {/* Fill Status */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-foreground">Fill Status</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-muted-foreground">Fills Adjudicated</div>
-                  <div className="font-medium">{selectedRow.fills_adjudicated ?? 0}</div>
-                  <div className="text-muted-foreground">Fills Remaining</div>
-                  <div className="font-medium">{selectedRow.fills_remaining ?? 0}</div>
-                  <div className="text-muted-foreground">Last Fill Date</div>
-                  <div className="font-medium">
-                    {selectedRow.last_fill_date ? format(new Date(selectedRow.last_fill_date), "MMM d, yyyy") : "-"}
-                  </div>
-                </div>
-              </div>
-
-              {/* Financial Info */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-foreground">Financial Summary</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-muted-foreground">Total Payments</div>
-                  <div className="font-medium text-success">
-                    ${(selectedRow.total_payments || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-muted-foreground">340B Drug Cost</div>
-                  <div className="font-medium">
-                    ${(selectedRow.total_340b_cost || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Pharmacy & Prescriber */}
-              <div className="space-y-2">
-                <h4 className="font-semibold text-foreground">Pharmacy & Prescriber</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="text-muted-foreground">Pharmacy</div>
-                  <div className="font-medium">{selectedRow.pharmacy_name || "-"}</div>
-                  <div className="text-muted-foreground">Prescriber</div>
-                  <div className="font-medium">{selectedRow.prescriber_name || "-"}</div>
-                </div>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Detail Drawer */}
+      <AdjudicationDetailDrawer 
+        selectedRow={selectedRow} 
+        onClose={() => setSelectedRow(null)} 
+      />
     </DashboardLayout>
   );
 };
