@@ -240,6 +240,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
             foreignKeyName: "claims_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
@@ -633,6 +640,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
             foreignKeyName: "prescriptions_prescriber_id_fkey"
             columns: ["prescriber_id"]
             isOneToOne: false
@@ -702,6 +716,95 @@ export type Database = {
         }
         Relationships: []
       }
+      drug_adherence_summary: {
+        Row: {
+          avg_340b_cost_per_claim: number | null
+          avg_days_to_fill: number | null
+          avg_payment_per_claim: number | null
+          drug_id: string | null
+          drug_name: string | null
+          fill_rate_pct: number | null
+          gross_savings: number | null
+          manufacturer_name: string | null
+          ndc_code: string | null
+          pharmacies_dispensing: number | null
+          total_340b_cost: number | null
+          total_claims: number | null
+          total_payments: number | null
+          total_prescriptions: number | null
+          total_qty_dispensed: number | null
+          total_retail_cost: number | null
+          unique_patients: number | null
+          unique_prescribers: number | null
+        }
+        Relationships: []
+      }
+      drug_pharmacy_comparison: {
+        Row: {
+          avg_payment_per_claim: number | null
+          avg_profit_per_claim: number | null
+          chain_pharmacy: string | null
+          claim_count: number | null
+          drug_id: string | null
+          drug_name: string | null
+          drug_total_claims: number | null
+          first_fill_date: string | null
+          gross_savings: number | null
+          last_fill_date: string | null
+          manufacturer_name: string | null
+          ndc_code: string | null
+          pharmacy_id: string | null
+          pharmacy_market_share_pct: number | null
+          pharmacy_name: string | null
+          single_pharmacy_drug: boolean | null
+          total_340b_cost: number | null
+          total_payments: number | null
+          total_pharmacies_dispensing: number | null
+          total_qty_dispensed: number | null
+          total_retail_cost: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_drug_id_fkey"
+            columns: ["drug_id"]
+            isOneToOne: false
+            referencedRelation: "drugs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+        ]
+      }
+      monthly_adherence_trends: {
+        Row: {
+          avg_days_to_fill: number | null
+          fill_rate_pct: number | null
+          gross_savings: number | null
+          month: string | null
+          prescriptions_filled: number | null
+          total_340b_cost: number | null
+          total_claims: number | null
+          total_payments: number | null
+          total_prescriptions: number | null
+          total_retail_cost: number | null
+          unique_patients: number | null
+          unique_pharmacies: number | null
+          unique_prescribers: number | null
+        }
+        Relationships: []
+      }
       monthly_financial_summary: {
         Row: {
           avg_days_supply: number | null
@@ -751,6 +854,140 @@ export type Database = {
             columns: ["pharmacy_id"]
             isOneToOne: false
             referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+        ]
+      }
+      pharmacy_contract_compliance: {
+        Row: {
+          capture_rate_pct: number | null
+          chain_pharmacy: string | null
+          contract_status: string | null
+          days_since_last_claim: number | null
+          estimated_lost_revenue: number | null
+          first_claim_date: string | null
+          first_prescription_date: string | null
+          gross_savings: number | null
+          last_claim_date: string | null
+          last_prescription_date: string | null
+          nabp_number: number | null
+          npi_number: number | null
+          patients_with_scripts: number | null
+          pharmacy_id: string | null
+          pharmacy_name: string | null
+          prescribers_writing: number | null
+          prescriptions_filled: number | null
+          prescriptions_written: number | null
+          total_340b_cost: number | null
+          total_claims: number | null
+          total_payments: number | null
+          total_retail_cost: number | null
+          unique_drugs_dispensed: number | null
+          unique_prescribers_served: number | null
+        }
+        Relationships: []
+      }
+      physician_capture_rates: {
+        Row: {
+          avg_days_to_fill: number | null
+          capture_rate_pct: number | null
+          estimated_lost_revenue: number | null
+          gross_savings: number | null
+          performance_tier: string | null
+          pharmacies_used: number | null
+          prescriber_dea: string | null
+          prescriber_first_name: string | null
+          prescriber_full_name: string | null
+          prescriber_id: string | null
+          prescriber_last_name: string | null
+          prescriber_npi: number | null
+          prescriptions_filled: number | null
+          total_340b_cost: number | null
+          total_claims: number | null
+          total_payments: number | null
+          total_prescriptions: number | null
+          total_retail_cost: number | null
+          unique_drugs: number | null
+          unique_patients: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_prescriber_id_fkey"
+            columns: ["prescriber_id"]
+            isOneToOne: false
+            referencedRelation: "prescribers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prescription_adherence_analysis: {
+        Row: {
+          adherence_status: string | null
+          days_to_first_fill: number | null
+          drug_id: string | null
+          drug_name: string | null
+          expected_fills: number | null
+          fill_rate_pct: number | null
+          first_fill_date: string | null
+          last_fill_date: string | null
+          ndc_code: string | null
+          patient_id: string | null
+          patient_mrn: string | null
+          patient_name: string | null
+          pharmacy_id: string | null
+          prescribed_date: string | null
+          prescribed_days_supply: number | null
+          prescriber_id: string | null
+          prescription_id: string | null
+          prescription_identifier: number | null
+          refills_authorized: number | null
+          time_to_fill_category: string | null
+          total_340b_cost: number | null
+          total_days_supplied: number | null
+          total_fills: number | null
+          total_payments: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prescriptions_drug_id_fkey"
+            columns: ["drug_id"]
+            isOneToOne: false
+            referencedRelation: "drugs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prescriptions_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+          {
+            foreignKeyName: "prescriptions_prescriber_id_fkey"
+            columns: ["prescriber_id"]
+            isOneToOne: false
+            referencedRelation: "prescribers"
             referencedColumns: ["id"]
           },
         ]
