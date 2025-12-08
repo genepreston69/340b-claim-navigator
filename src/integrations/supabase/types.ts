@@ -657,7 +657,30 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      adjudication_status: {
+        Row: {
+          adjudication_status: string | null
+          days_supply: number | null
+          dispense_quantity: number | null
+          fills_adjudicated: number | null
+          fills_remaining: number | null
+          last_fill_date: string | null
+          medication_name: string | null
+          ndc_code: string | null
+          patient_mrn: string | null
+          patient_name: string | null
+          pharmacy_name: string | null
+          prescribed_date: string | null
+          prescriber_name: string | null
+          prescription_id: string | null
+          prescription_identifier: number | null
+          prescription_status: string | null
+          refills_authorized: number | null
+          total_340b_cost: number | null
+          total_payments: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
