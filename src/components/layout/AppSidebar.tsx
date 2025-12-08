@@ -23,11 +23,11 @@ const navigationItems = [
 ];
 
 const analyticsItems = [
-  { title: "Financial Reports", url: "/reports", icon: BarChart3, adminOnly: true },
-  { title: "Rx Adherence", url: "/prescription-adherence", icon: Pill, adminOnly: true },
-  { title: "Physician Rates", url: "/physician-capture-rates", icon: Stethoscope, adminOnly: true },
-  { title: "Drug-Pharmacy", url: "/drug-pharmacy-comparison", icon: Building2, adminOnly: true },
-  { title: "Contract Status", url: "/contract-compliance", icon: FileWarning, adminOnly: true },
+  { title: "Financial Reports", url: "/reports", icon: BarChart3 },
+  { title: "Rx Adherence", url: "/prescription-adherence", icon: Pill },
+  { title: "Physician Rates", url: "/physician-capture-rates", icon: Stethoscope },
+  { title: "Drug-Pharmacy", url: "/drug-pharmacy-comparison", icon: Building2 },
+  { title: "Contract Status", url: "/contract-compliance", icon: FileWarning },
 ];
 
 const adminItems = [
@@ -37,11 +37,11 @@ const adminItems = [
 
 export function AppSidebar() {
   const { state } = useSidebar();
-  const { isAdmin } = useAuth();
+  const { isAdmin, hasAnalyticsAccess } = useAuth();
   const isCollapsed = state === "collapsed";
 
   const visibleNavItems = navigationItems.filter(item => !item.adminOnly || isAdmin);
-  const visibleAnalyticsItems = analyticsItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleAnalyticsItems = hasAnalyticsAccess ? analyticsItems : [];
   const visibleAdminItems = adminItems.filter(item => !item.adminOnly || isAdmin);
 
   const renderNavItem = (item: typeof navigationItems[0]) => (
