@@ -251,9 +251,7 @@ export default function PhysicianCaptureRates() {
       item.unique_drugs || 0,
       item.total_payments || 0,
       item.total_340b_cost || 0,
-      item.gross_savings || 0,
       item.estimated_lost_revenue || 0,
-      item.avg_days_to_fill || 0,
     ]);
 
     const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join(
@@ -606,14 +604,15 @@ export default function PhysicianCaptureRates() {
               <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
+                     <TableRow>
                       <TableHead>Prescriber</TableHead>
                       <TableHead className="text-center">Scripts</TableHead>
                       <TableHead className="text-center">Filled</TableHead>
                       <TableHead className="text-center">Capture Rate</TableHead>
                       <TableHead>Tier</TableHead>
                       <TableHead className="text-center">Patients</TableHead>
-                      <TableHead className="text-right">Savings</TableHead>
+                      <TableHead className="text-right">Total Payments</TableHead>
+                      <TableHead className="text-right">340B Cost</TableHead>
                       <TableHead className="text-right">Lost Revenue</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -649,8 +648,11 @@ export default function PhysicianCaptureRates() {
                         <TableCell className="text-center">
                           {(item.unique_patients || 0).toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">
-                          {formatCurrency(item.gross_savings)}
+                        <TableCell className="text-right">
+                          {formatCurrency(item.total_payments)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(item.total_340b_cost)}
                         </TableCell>
                         <TableCell className="text-right text-red-600 font-medium">
                           {formatCurrency(item.estimated_lost_revenue)}
