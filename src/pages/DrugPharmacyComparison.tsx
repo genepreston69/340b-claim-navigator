@@ -227,8 +227,6 @@ export default function DrugPharmacyComparison() {
       "Qty Dispensed",
       "Total Payments",
       "340B Cost",
-      "Retail Cost",
-      "Gross Savings",
       "Market Share %",
       "Single Pharmacy Drug",
       "First Fill",
@@ -245,8 +243,6 @@ export default function DrugPharmacyComparison() {
       item.total_qty_dispensed || 0,
       item.total_payments || 0,
       item.total_340b_cost || 0,
-      item.total_retail_cost || 0,
-      item.gross_savings || 0,
       item.pharmacy_market_share_pct || 0,
       item.single_pharmacy_drug ? "Yes" : "No",
       item.first_fill_date || "",
@@ -498,7 +494,7 @@ export default function DrugPharmacyComparison() {
                       <TableHead>NDC</TableHead>
                       <TableHead>Only Pharmacy</TableHead>
                       <TableHead className="text-center">Claims</TableHead>
-                      <TableHead className="text-right">Savings</TableHead>
+                      <TableHead className="text-right">Total Payments</TableHead>
                       <TableHead>Last Fill</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -517,8 +513,8 @@ export default function DrugPharmacyComparison() {
                         <TableCell className="text-center">
                           {(item.claim_count || 0).toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">
-                          {formatCurrency(item.gross_savings)}
+                        <TableCell className="text-right">
+                          {formatCurrency(item.total_payments)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {item.last_fill_date
@@ -595,7 +591,6 @@ export default function DrugPharmacyComparison() {
                       <TableHead className="text-center">Market Share</TableHead>
                       <TableHead className="text-right">Total Payments</TableHead>
                       <TableHead className="text-right">340B Cost</TableHead>
-                      <TableHead className="text-right">Savings</TableHead>
                       <TableHead className="text-center">Pharmacies</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -635,9 +630,6 @@ export default function DrugPharmacyComparison() {
                         </TableCell>
                         <TableCell className="text-right">
                           {formatCurrency(item.total_340b_cost)}
-                        </TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">
-                          {formatCurrency(item.gross_savings)}
                         </TableCell>
                         <TableCell className="text-center">
                           {item.single_pharmacy_drug ? (

@@ -133,9 +133,7 @@ export default function Reports() {
       existing.totalClaims += Number(row.total_claims) || 0;
       existing.total340BCost += Number(row.total_340b_cost) || 0;
       existing.totalPayments += Number(row.total_payments) || 0;
-      existing.grossSavings += Number(row.gross_savings) || 0;
       existing.benefit340B += Number(row.benefit_340b) || 0;
-      existing.avgDaysToFillSum += Number(row.avg_days_to_fill) || 0;
       existing.monthCount += 1;
     } else {
       acc.push({
@@ -143,9 +141,7 @@ export default function Reports() {
         totalClaims: Number(row.total_claims) || 0,
         total340BCost: Number(row.total_340b_cost) || 0,
         totalPayments: Number(row.total_payments) || 0,
-        grossSavings: Number(row.gross_savings) || 0,
         benefit340B: Number(row.benefit_340b) || 0,
-        avgDaysToFillSum: Number(row.avg_days_to_fill) || 0,
         monthCount: 1,
       });
     }
@@ -155,14 +151,9 @@ export default function Reports() {
     totalClaims: number;
     total340BCost: number;
     totalPayments: number;
-    grossSavings: number;
     benefit340B: number;
-    avgDaysToFillSum: number;
     monthCount: number;
-  }>).map((p) => ({
-    ...p,
-    avgDaysToFill: p.monthCount > 0 ? p.avgDaysToFillSum / p.monthCount : 0,
-  })).sort((a, b) => b.totalClaims - a.totalClaims);
+  }>).sort((a, b) => b.totalClaims - a.totalClaims);
 
   // Aggregate payer mix across all months
   const totalClaimsAll = payerSummary.reduce((sum, r) => sum + (Number(r.claim_count) || 0), 0);
@@ -199,7 +190,7 @@ export default function Reports() {
   const chartData = monthlySummary.map((item) => ({
     month: formatMonth(item.month),
     "340B Cost": Number(item.total_340b_cost) || 0,
-    Savings: Number(item.gross_savings) || 0,
+    "340B Benefit": Number(item.benefit_340b) || 0,
   }));
 
   // Export functions
@@ -235,13 +226,12 @@ export default function Reports() {
   const totalStats = monthlySummary.reduce(
     (acc, row) => ({
       totalClaims: acc.totalClaims + (Number(row.total_claims) || 0),
-      total340BCost: acc.total340BCost + (Number(row.total_340b_cost) || 0),
-      totalRetailCost: acc.totalRetailCost + (Number(row.total_retail_cost) || 0),
-      grossSavings: acc.grossSavings + (Number(row.gross_savings) || 0),
       totalPayments: acc.totalPayments + (Number(row.total_payments) || 0),
+      total340BCost: acc.total340BCost + (Number(row.total_340b_cost) || 0),
+      totalDispensingFees: acc.totalDispensingFees + (Number(row.total_dispensing_fees) || 0),
       benefit340B: acc.benefit340B + (Number(row.benefit_340b) || 0),
     }),
-    { totalClaims: 0, total340BCost: 0, totalRetailCost: 0, grossSavings: 0, totalPayments: 0, benefit340B: 0 }
+    { totalClaims: 0, totalPayments: 0, total340BCost: 0, totalDispensingFees: 0, benefit340B: 0 }
   );
 
   return (
@@ -270,10 +260,9 @@ export default function Reports() {
                   monthlySummary.map((m) => ({
                     Month: formatMonth(m.month),
                     "Total Claims": m.total_claims,
-                    "340B Cost": m.total_340b_cost,
-                    "Retail Cost": m.total_retail_cost,
-                    "Gross Savings": m.gross_savings,
                     "Total Payments": m.total_payments,
+                    "340B Cost": m.total_340b_cost,
+                    "Dispensing Fees": m.total_dispensing_fees,
                     "340B Benefit": m.benefit_340b,
                   })),
                   "340b-savings-analysis"
@@ -310,10 +299,9 @@ export default function Reports() {
                       <TableRow>
                         <TableHead>Month</TableHead>
                         <TableHead className="text-right">Total Claims</TableHead>
+                        <TableHead className="text-right">Total Payments</TableHead>
                         <TableHead className="text-right">340B Cost</TableHead>
-                        <TableHead className="text-right">Retail Cost</TableHead>
-                        <TableHead className="text-right">Gross Savings</TableHead>
-                        <TableHead className="text-right">Payments Received</TableHead>
+                        <TableHead className="text-right">Dispensing Fees</TableHead>
                         <TableHead className="text-right">340B Benefit</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -322,12 +310,9 @@ export default function Reports() {
                         <TableRow key={row.month}>
                           <TableCell className="font-medium">{formatMonth(row.month)}</TableCell>
                           <TableCell className="text-right">{Number(row.total_claims).toLocaleString()}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(Number(row.total_340b_cost))}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(Number(row.total_retail_cost))}</TableCell>
-                          <TableCell className="text-right text-green-600 font-medium">
-                            {formatCurrency(Number(row.gross_savings))}
-                          </TableCell>
                           <TableCell className="text-right">{formatCurrency(Number(row.total_payments))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(row.total_340b_cost))}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(Number(row.total_dispensing_fees))}</TableCell>
                           <TableCell className={`text-right font-medium ${Number(row.benefit_340b) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {formatCurrency(Number(row.benefit_340b))}
                           </TableCell>
@@ -337,10 +322,9 @@ export default function Reports() {
                       <TableRow className="bg-muted/50 font-semibold">
                         <TableCell>Total</TableCell>
                         <TableCell className="text-right">{totalStats.totalClaims.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(totalStats.total340BCost)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(totalStats.totalRetailCost)}</TableCell>
-                        <TableCell className="text-right text-green-600">{formatCurrency(totalStats.grossSavings)}</TableCell>
                         <TableCell className="text-right">{formatCurrency(totalStats.totalPayments)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalStats.total340BCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(totalStats.totalDispensingFees)}</TableCell>
                         <TableCell className={`text-right ${totalStats.benefit340B >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatCurrency(totalStats.benefit340B)}
                         </TableCell>
@@ -377,7 +361,7 @@ export default function Reports() {
                       />
                       <Legend />
                       <Bar dataKey="340B Cost" stackId="a" fill="hsl(var(--primary))" />
-                      <Bar dataKey="Savings" stackId="a" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="340B Benefit" stackId="a" fill="hsl(142 76% 36%)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -401,11 +385,9 @@ export default function Reports() {
                   pharmacyPerformance.map((p) => ({
                     "Pharmacy Name": p.pharmacyName,
                     "Total Claims": p.totalClaims,
-                    "340B Cost": p.total340BCost,
                     "Total Payments": p.totalPayments,
-                    "Gross Savings": p.grossSavings,
+                    "340B Cost": p.total340BCost,
                     "340B Benefit": p.benefit340B,
-                    "Avg Days to Fill": p.avgDaysToFill,
                   })),
                   "pharmacy-performance"
                 )}
@@ -435,54 +417,44 @@ export default function Reports() {
             ) : (
               <div className="rounded-md border">
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Pharmacy Name</TableHead>
-                      <TableHead className="text-right">Total Claims</TableHead>
-                      <TableHead className="text-right">340B Cost</TableHead>
-                      <TableHead className="text-right">Total Payments</TableHead>
-                      <TableHead className="text-right">Gross Savings</TableHead>
-                      <TableHead className="text-right">340B Benefit</TableHead>
-                      <TableHead className="text-right">Avg Days to Fill</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pharmacyPerformance.map((row) => (
-                      <TableRow key={row.pharmacyName}>
-                        <TableCell className="font-medium">{row.pharmacyName}</TableCell>
-                        <TableCell className="text-right">{row.totalClaims.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(row.total340BCost)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(row.totalPayments)}</TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">
-                          {formatCurrency(row.grossSavings)}
-                        </TableCell>
-                        <TableCell className={`text-right font-medium ${row.benefit340B >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(row.benefit340B)}
-                        </TableCell>
-                        <TableCell className="text-right">{row.avgDaysToFill.toFixed(1)} days</TableCell>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Pharmacy Name</TableHead>
+                        <TableHead className="text-right">Total Claims</TableHead>
+                        <TableHead className="text-right">Total Payments</TableHead>
+                        <TableHead className="text-right">340B Cost</TableHead>
+                        <TableHead className="text-right">340B Benefit</TableHead>
                       </TableRow>
-                    ))}
-                    {/* Totals Row */}
-                    <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell>Total</TableCell>
-                      <TableCell className="text-right">
-                        {pharmacyPerformance.reduce((sum, r) => sum + r.totalClaims, 0).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.total340BCost, 0))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.totalPayments, 0))}
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.grossSavings, 0))}
-                      </TableCell>
-                      <TableCell className={`text-right ${pharmacyPerformance.reduce((sum, r) => sum + r.benefit340B, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.benefit340B, 0))}
-                      </TableCell>
-                      <TableCell className="text-right">-</TableCell>
-                    </TableRow>
-                  </TableBody>
+                    </TableHeader>
+                    <TableBody>
+                      {pharmacyPerformance.map((row) => (
+                        <TableRow key={row.pharmacyName}>
+                          <TableCell className="font-medium">{row.pharmacyName}</TableCell>
+                          <TableCell className="text-right">{row.totalClaims.toLocaleString()}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(row.totalPayments)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(row.total340BCost)}</TableCell>
+                          <TableCell className={`text-right font-medium ${row.benefit340B >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(row.benefit340B)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {/* Totals Row */}
+                      <TableRow className="bg-muted/50 font-semibold">
+                        <TableCell>Total</TableCell>
+                        <TableCell className="text-right">
+                          {pharmacyPerformance.reduce((sum, r) => sum + r.totalClaims, 0).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.totalPayments, 0))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.total340BCost, 0))}
+                        </TableCell>
+                        <TableCell className={`text-right ${pharmacyPerformance.reduce((sum, r) => sum + r.benefit340B, 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(pharmacyPerformance.reduce((sum, r) => sum + r.benefit340B, 0))}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
                 </Table>
               </div>
             )}

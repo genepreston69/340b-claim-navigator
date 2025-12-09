@@ -376,12 +376,12 @@ export default function PrescriptionAdherence() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Avg Days to Fill</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{metrics.avgDaysToFill.toFixed(1)} days</div>
-              <p className="text-xs text-muted-foreground">Time from prescribed to filled</p>
+              <div className="text-2xl font-bold">{formatCurrency(metrics.totalPayments)}</div>
+              <p className="text-xs text-muted-foreground">From filled prescriptions</p>
             </CardContent>
           </Card>
         </div>
