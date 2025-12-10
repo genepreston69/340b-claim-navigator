@@ -31,7 +31,10 @@ import {
   CheckCircle,
   XCircle,
   Search,
+  Building2,
+  User,
 } from "lucide-react";
+import { usePharmacyFilter, usePrescriberFilter } from "@/hooks/useAnalyticsFilters";
 import {
   BarChart,
   Bar,
@@ -80,15 +83,21 @@ export default function PrescriptionAdherence() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [timeFilter, setTimeFilter] = useState<string>("all");
+  const [pharmacyFilter, setPharmacyFilter] = useState<string>("all");
+  const [prescriberFilter, setPrescriberFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(25);
 
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
 
+  // Load pharmacy and prescriber filter options
+  const { data: pharmacyOptions = [] } = usePharmacyFilter();
+  const { data: prescriberOptions = [] } = usePrescriberFilter();
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, timeFilter, debouncedSearchQuery]);
+  }, [statusFilter, timeFilter, pharmacyFilter, prescriberFilter, debouncedSearchQuery]);
 
   // Fetch filter options
   const { data: filterOptions } = useQuery({
@@ -161,7 +170,7 @@ export default function PrescriptionAdherence() {
   const { data: paginatedResult, isLoading: adherenceLoading } = useQuery({
     queryKey: [
       "prescription-adherence-paginated",
-      currentPage, pageSize, statusFilter, timeFilter, debouncedSearchQuery
+      currentPage, pageSize, statusFilter, timeFilter, pharmacyFilter, prescriberFilter, debouncedSearchQuery
     ],
     queryFn: async () => {
       let query = supabase
@@ -175,6 +184,12 @@ export default function PrescriptionAdherence() {
       if (timeFilter !== "all") {
         query = query.eq("time_to_fill_category", timeFilter);
       }
+      if (pharmacyFilter !== "all") {
+        query = query.eq("pharmacy_id", pharmacyFilter);
+      }
+      if (prescriberFilter !== "all") {
+        query = query.eq("prescriber_id", prescriberFilter);
+      }
       if (debouncedSearchQuery) {
         query = query.or(`drug_name.ilike.%${debouncedSearchQuery}%,ndc_code.ilike.%${debouncedSearchQuery}%`);
       }
@@ -187,7 +202,7 @@ export default function PrescriptionAdherence() {
 
       const { data, error, count } = await query;
       if (error) throw error;
-      
+
       return { data: data as AdherenceData[], totalCount: count || 0 };
     },
   });
@@ -522,9 +537,9 @@ export default function PrescriptionAdherence() {
         {/* Detailed Table */}
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Prescription Details ({totalCount.toLocaleString()})</CardTitle>
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Prescription Details ({totalCount.toLocaleString()})</CardTitle>
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -534,6 +549,32 @@ export default function PrescriptionAdherence() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Select value={pharmacyFilter} onValueChange={setPharmacyFilter}>
+                  <SelectTrigger className="w-[180px]">
+                    <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="All Pharmacies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Pharmacies</SelectItem>
+                    {pharmacyOptions.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={prescriberFilter} onValueChange={setPrescriberFilter}>
+                  <SelectTrigger className="w-[200px]">
+                    <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <SelectValue placeholder="All Prescribers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Prescribers</SelectItem>
+                    {prescriberOptions.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="Adherence Status" />

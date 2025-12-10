@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -11,7 +12,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Download, FileText, TrendingUp, Building2, PieChart, FileSpreadsheet } from "lucide-react";
+import { usePharmacyFilter } from "@/hooks/useAnalyticsFilters";
 import {
   BarChart,
   Bar,
@@ -89,6 +98,10 @@ export default function Reports() {
   // Date range state
   const { dateRange, setDateRange, fromDate, toDate } = useDateRange("last6months");
 
+  // Pharmacy filter state
+  const [selectedPharmacy, setSelectedPharmacy] = useState<string>("all");
+  const { data: pharmacyOptions = [], isLoading: pharmacyOptionsLoading } = usePharmacyFilter();
+
   // Fetch monthly financial summary from view with date filtering
   const { data: monthlySummary = [], isLoading: monthlySummaryLoading } = useQuery({
     queryKey: ["monthly-financial-summary", fromDate, toDate],
@@ -157,8 +170,13 @@ export default function Reports() {
 
   const isLoading = monthlySummaryLoading || pharmacySummaryLoading || payerSummaryLoading;
 
+  // Filter pharmacy summary by selected pharmacy
+  const filteredPharmacySummary = selectedPharmacy === "all"
+    ? pharmacySummary
+    : pharmacySummary.filter((row) => row.pharmacy_id === selectedPharmacy);
+
   // Aggregate pharmacy performance across all months
-  const pharmacyPerformance = pharmacySummary.reduce((acc, row) => {
+  const pharmacyPerformance = filteredPharmacySummary.reduce((acc, row) => {
     const name = row.pharmacy_name || "Unknown";
     const existing = acc.find((p) => p.pharmacyName === name);
     if (existing) {
@@ -330,7 +348,7 @@ export default function Reports() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header with Date Range */}
+        {/* Header with Date Range and Filters */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Financial Reports</h1>
@@ -338,12 +356,28 @@ export default function Reports() {
               Comprehensive 340B program financial analytics and performance metrics
             </p>
           </div>
-          <DateRangePicker
-            value={dateRange}
-            onChange={setDateRange}
-            className="w-[280px]"
-            showPresets={true}
-          />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Select value={selectedPharmacy} onValueChange={setSelectedPharmacy}>
+              <SelectTrigger className="w-[200px]">
+                <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="All Pharmacies" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Pharmacies</SelectItem>
+                {pharmacyOptions.map((pharmacy) => (
+                  <SelectItem key={pharmacy.value} value={pharmacy.value}>
+                    {pharmacy.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DateRangePicker
+              value={dateRange}
+              onChange={setDateRange}
+              className="w-[280px]"
+              showPresets={true}
+            />
+          </div>
         </div>
 
         {/* Section 1: 340B Savings Analysis - Monthly Totals */}
