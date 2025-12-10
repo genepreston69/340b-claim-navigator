@@ -16,23 +16,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Download,
   Building2,
   AlertTriangle,
   XCircle,
   Search,
-  ShieldAlert,
   FileSpreadsheet,
   CheckCircle2,
-  Ban,
   TrendingUp,
-  TrendingDown,
   PieChart,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Tables } from "@/integrations/supabase/types";
-import { DateRangePicker, useDateRange } from "@/components/ui/date-range-picker";
-import { exportToExcel, exportToCSV, type ExportColumn } from "@/utils/exportUtils";
+import { exportToExcel, type ExportColumn } from "@/utils/exportUtils";
 import {
   BarChart,
   Bar,
@@ -42,14 +37,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  Cell,
 } from "recharts";
 
 type ContractComplianceData = Tables<"pharmacy_contract_compliance">;
-type DrugExclusionSummary = Tables<"drug_exclusion_summary">;
-type ContractPharmacyExclusion = Tables<"contract_pharmacy_exclusion_analysis">;
+type DrugBenefitSummary = Tables<"drug_benefit_summary">;
 type MedicaidCarveSummary = Tables<"medicaid_carve_summary">;
-type MedicaidCarveAnalysis = Tables<"medicaid_carve_analysis">;
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat("en-US", {
@@ -70,8 +62,8 @@ const formatMonth = (dateStr: string | null) => {
 
 export default function ContractCompliance() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [exclusionSearchQuery, setExclusionSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("exclusions");
+  const [benefitSearchQuery, setBenefitSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("benefit");
 
   // Fetch contract compliance data (uncontracted pharmacies)
   const { data: complianceData = [], isLoading: complianceLoading } = useQuery({
@@ -86,28 +78,15 @@ export default function ContractCompliance() {
     },
   });
 
-  // Fetch drug exclusion summary
-  const { data: drugExclusionData = [], isLoading: exclusionLoading } = useQuery({
-    queryKey: ["drug-exclusion-summary"],
+  // Fetch drug benefit summary - drugs with inconsistent benefit across pharmacies
+  const { data: drugBenefitData = [], isLoading: benefitLoading } = useQuery({
+    queryKey: ["drug-benefit-summary"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("drug_exclusion_summary")
+        .from("drug_benefit_summary")
         .select("*");
       if (error) throw error;
-      return (data || []) as DrugExclusionSummary[];
-    },
-  });
-
-  // Fetch detailed pharmacy exclusion data for drill-down
-  const { data: pharmacyExclusionData = [], isLoading: pharmacyExclusionLoading } = useQuery({
-    queryKey: ["contract-pharmacy-exclusion-analysis"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contract_pharmacy_exclusion_analysis")
-        .select("*")
-        .eq("has_exclusion_pattern", true);
-      if (error) throw error;
-      return (data || []) as ContractPharmacyExclusion[];
+      return (data || []) as DrugBenefitSummary[];
     },
   });
 
@@ -138,26 +117,24 @@ export default function ContractCompliance() {
     return { total, totalScripts, totalPatients };
   }, [complianceData]);
 
-  // Calculate exclusion metrics
-  const exclusionMetrics = useMemo(() => {
-    const partiallyExcluded = drugExclusionData.filter(d => d.exclusion_status === "Partial Exclusion");
-    const fullyExcluded = drugExclusionData.filter(d => d.exclusion_status === "Fully Excluded");
-    const totalLostRevenue = drugExclusionData.reduce(
-      (sum, d) => sum + (Number(d.total_estimated_lost_revenue) || 0),
+  // Calculate benefit comparison metrics
+  const benefitMetrics = useMemo(() => {
+    const totalDrugs = drugBenefitData.length;
+    const totalClaimsWithoutBenefit = drugBenefitData.reduce(
+      (sum, d) => sum + (Number(d.claims_without_benefit) || 0),
       0
     );
-    const affectedClaims = drugExclusionData.reduce(
-      (sum, d) => sum + (Number(d.claims_without_benefit) || 0),
+    const totalBenefit = drugBenefitData.reduce(
+      (sum, d) => sum + (Number(d.total_benefit) || 0),
       0
     );
 
     return {
-      partiallyExcludedCount: partiallyExcluded.length,
-      fullyExcludedCount: fullyExcluded.length,
-      totalLostRevenue,
-      affectedClaims,
+      totalDrugs,
+      totalClaimsWithoutBenefit,
+      totalBenefit,
     };
-  }, [drugExclusionData]);
+  }, [drugBenefitData]);
 
   // Calculate Medicaid metrics
   const medicaidMetrics = useMemo(() => {
@@ -191,17 +168,17 @@ export default function ContractCompliance() {
     });
   }, [complianceData, searchQuery]);
 
-  // Filter exclusion data
-  const filteredExclusionData = useMemo(() => {
-    return drugExclusionData.filter((item) => {
-      const searchLower = exclusionSearchQuery.toLowerCase();
+  // Filter benefit data
+  const filteredBenefitData = useMemo(() => {
+    return drugBenefitData.filter((item) => {
+      const searchLower = benefitSearchQuery.toLowerCase();
       return (
-        !exclusionSearchQuery ||
+        !benefitSearchQuery ||
         item.drug_name?.toLowerCase().includes(searchLower) ||
         item.ndc?.toString().includes(searchLower)
       );
     });
-  }, [drugExclusionData, exclusionSearchQuery]);
+  }, [drugBenefitData, benefitSearchQuery]);
 
   // Prepare chart data for Medicaid carve trends
   const medicaidChartData = medicaidCarveSummary.slice(0, 12).reverse().map((row) => ({
@@ -211,20 +188,22 @@ export default function ContractCompliance() {
   }));
 
   // Export handlers
-  const handleExportExclusionsExcel = () => {
-    const columns: ExportColumn<DrugExclusionSummary>[] = [
+  const handleExportBenefitExcel = () => {
+    const columns: ExportColumn<DrugBenefitSummary>[] = [
       { header: "Drug Name", accessor: "drug_name", width: 30 },
       { header: "NDC", accessor: "ndc", format: "text", width: 15 },
-      { header: "Exclusion Status", accessor: "exclusion_status", width: 18 },
       { header: "Total Pharmacies", accessor: "total_pharmacies", format: "number", width: 16 },
       { header: "With Benefit", accessor: "pharmacies_with_benefit", format: "number", width: 14 },
-      { header: "Excluded", accessor: "pharmacies_excluded", format: "number", width: 12 },
+      { header: "Without Benefit", accessor: "pharmacies_without_benefit", format: "number", width: 16 },
       { header: "Total Claims", accessor: "total_claims", format: "number", width: 14 },
-      { header: "Est. Lost Revenue", accessor: "total_estimated_lost_revenue", format: "currency", width: 18 },
+      { header: "Claims With Benefit", accessor: "claims_with_benefit", format: "number", width: 18 },
+      { header: "Claims Without Benefit", accessor: "claims_without_benefit", format: "number", width: 20 },
+      { header: "Pharmacies With Benefit", accessor: "pharmacies_with_benefit_list", width: 40 },
+      { header: "Pharmacies Without Benefit", accessor: "pharmacies_without_benefit_list", width: 40 },
     ];
-    exportToExcel(filteredExclusionData, columns, {
-      filename: "contract-pharmacy-exclusions",
-      sheetName: "Drug Exclusions",
+    exportToExcel(filteredBenefitData, columns, {
+      filename: "pharmacy-benefit-comparison",
+      sheetName: "Benefit Comparison",
       includeTimestamp: true,
     });
   };
@@ -263,8 +242,6 @@ export default function ContractCompliance() {
     });
   };
 
-  const isLoading = complianceLoading || exclusionLoading || medicaidSummaryLoading;
-
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -275,7 +252,7 @@ export default function ContractCompliance() {
               Contract Pharmacy Analysis
             </h1>
             <p className="text-muted-foreground">
-              Manufacturer exclusions, Medicaid carve-out analysis, and contract compliance
+              Pharmacy benefit comparison, Medicaid carve-out analysis, and contract compliance
             </p>
           </div>
         </div>
@@ -283,9 +260,9 @@ export default function ContractCompliance() {
         {/* Tabs for different analyses */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="exclusions" className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4" />
-              Drug Exclusions
+            <TabsTrigger value="benefit" className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              Benefit Comparison
             </TabsTrigger>
             <TabsTrigger value="medicaid" className="flex items-center gap-2">
               <PieChart className="h-4 w-4" />
@@ -297,82 +274,68 @@ export default function ContractCompliance() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: Contract Pharmacy Exclusion Analysis */}
-          <TabsContent value="exclusions" className="space-y-6">
-            {/* Exclusion Summary Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {/* Tab 1: Pharmacy Benefit Comparison */}
+          <TabsContent value="benefit" className="space-y-6">
+            {/* Benefit Summary Cards */}
+            <div className="grid gap-4 md:grid-cols-3">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Partially Excluded Drugs</CardTitle>
+                  <CardTitle className="text-sm font-medium">Drugs with Inconsistent Benefit</CardTitle>
                   <AlertTriangle className="h-4 w-4 text-orange-500" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-orange-600">
-                    {exclusionMetrics.partiallyExcludedCount}
+                    {benefitMetrics.totalDrugs}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    340B benefit varies by pharmacy
+                    Drugs with benefit at some pharmacies but not others
                   </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Fully Excluded Drugs</CardTitle>
-                  <Ban className="h-4 w-4 text-red-500" />
+                  <CardTitle className="text-sm font-medium">Claims Without Benefit</CardTitle>
+                  <XCircle className="h-4 w-4 text-red-500" />
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-red-600">
-                    {exclusionMetrics.fullyExcludedCount}
+                    {benefitMetrics.totalClaimsWithoutBenefit.toLocaleString()}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    No 340B benefit at any pharmacy
+                    Claims at pharmacies without 340B benefit
                   </p>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Affected Claims</CardTitle>
-                  <XCircle className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium">Total 340B Benefit</CardTitle>
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
-                    {exclusionMetrics.affectedClaims.toLocaleString()}
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(benefitMetrics.totalBenefit)}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Claims without 340B benefit
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Est. Lost Revenue</CardTitle>
-                  <TrendingDown className="h-4 w-4 text-red-500" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-600">
-                    {formatCurrency(exclusionMetrics.totalLostRevenue)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Potential 340B savings missed
+                    From pharmacies with benefit
                   </p>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Exclusion Table */}
+            {/* Benefit Comparison Table */}
             <Card>
               <CardHeader>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
-                      <ShieldAlert className="h-5 w-5 text-orange-500" />
-                      Contract Pharmacy Exclusion Analysis
+                      <AlertTriangle className="h-5 w-5 text-orange-500" />
+                      Pharmacy Benefit Comparison
                     </CardTitle>
                     <CardDescription>
-                      Drugs where some pharmacies show 340B benefit while others do not (indicating manufacturer restrictions)
+                      Drugs where one pharmacy dispenses with 340B benefit while another pharmacy does not -
+                      indicates potential exclusions or contract issues
                     </CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -381,11 +344,11 @@ export default function ContractCompliance() {
                       <Input
                         placeholder="Search drug, NDC..."
                         className="pl-8 w-[200px]"
-                        value={exclusionSearchQuery}
-                        onChange={(e) => setExclusionSearchQuery(e.target.value)}
+                        value={benefitSearchQuery}
+                        onChange={(e) => setBenefitSearchQuery(e.target.value)}
                       />
                     </div>
-                    <Button variant="outline" size="sm" onClick={handleExportExclusionsExcel}>
+                    <Button variant="outline" size="sm" onClick={handleExportBenefitExcel}>
                       <FileSpreadsheet className="h-4 w-4 mr-2" />
                       Excel
                     </Button>
@@ -393,14 +356,14 @@ export default function ContractCompliance() {
                 </div>
               </CardHeader>
               <CardContent>
-                {exclusionLoading ? (
+                {benefitLoading ? (
                   <div className="flex items-center justify-center h-32">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
                   </div>
-                ) : filteredExclusionData.length === 0 ? (
+                ) : filteredBenefitData.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
-                    <p>No exclusion patterns detected</p>
-                    <p className="text-sm">All drugs show consistent 340B benefit across pharmacies</p>
+                    <p>No benefit discrepancies detected</p>
+                    <p className="text-sm">All drugs show consistent benefit status across pharmacies</p>
                   </div>
                 ) : (
                   <div className="rounded-md border overflow-x-auto">
@@ -409,44 +372,23 @@ export default function ContractCompliance() {
                         <TableRow>
                           <TableHead>Drug Name</TableHead>
                           <TableHead>NDC</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-center">Total Pharmacies</TableHead>
+                          <TableHead className="text-center">Pharmacies</TableHead>
                           <TableHead className="text-center">With Benefit</TableHead>
-                          <TableHead className="text-center">Excluded</TableHead>
-                          <TableHead className="text-right">Total Claims</TableHead>
-                          <TableHead className="text-right">Est. Lost Revenue</TableHead>
+                          <TableHead className="text-center">Without Benefit</TableHead>
+                          <TableHead className="text-right">Claims With</TableHead>
+                          <TableHead className="text-right">Claims Without</TableHead>
+                          <TableHead>Pharmacies With Benefit</TableHead>
+                          <TableHead>Pharmacies Without Benefit</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredExclusionData.slice(0, 100).map((item, index) => (
+                        {filteredBenefitData.slice(0, 100).map((item, index) => (
                           <TableRow key={`${item.ndc}-${index}`}>
                             <TableCell className="font-medium max-w-[200px] truncate">
                               {item.drug_name || "Unknown"}
                             </TableCell>
                             <TableCell className="font-mono text-sm">
                               {item.ndc || "N/A"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                className={
-                                  item.exclusion_status === "Partial Exclusion"
-                                    ? "bg-orange-100 text-orange-800 hover:bg-orange-100"
-                                    : item.exclusion_status === "Fully Excluded"
-                                    ? "bg-red-100 text-red-800 hover:bg-red-100"
-                                    : "bg-green-100 text-green-800 hover:bg-green-100"
-                                }
-                              >
-                                {item.exclusion_status === "Partial Exclusion" && (
-                                  <AlertTriangle className="w-3 h-3 mr-1" />
-                                )}
-                                {item.exclusion_status === "Fully Excluded" && (
-                                  <Ban className="w-3 h-3 mr-1" />
-                                )}
-                                {item.exclusion_status === "No Exclusion" && (
-                                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                                )}
-                                {item.exclusion_status}
-                              </Badge>
                             </TableCell>
                             <TableCell className="text-center">
                               {item.total_pharmacies || 0}
@@ -455,13 +397,23 @@ export default function ContractCompliance() {
                               {item.pharmacies_with_benefit || 0}
                             </TableCell>
                             <TableCell className="text-center text-red-600 font-medium">
-                              {item.pharmacies_excluded || 0}
+                              {item.pharmacies_without_benefit || 0}
                             </TableCell>
-                            <TableCell className="text-right">
-                              {(item.total_claims || 0).toLocaleString()}
+                            <TableCell className="text-right text-green-600">
+                              {(item.claims_with_benefit || 0).toLocaleString()}
                             </TableCell>
-                            <TableCell className="text-right font-medium text-red-600">
-                              {formatCurrency(Number(item.total_estimated_lost_revenue) || 0)}
+                            <TableCell className="text-right text-red-600">
+                              {(item.claims_without_benefit || 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <span className="text-xs text-green-700 line-clamp-2">
+                                {item.pharmacies_with_benefit_list || "-"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <span className="text-xs text-red-700 line-clamp-2">
+                                {item.pharmacies_without_benefit_list || "-"}
+                              </span>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -469,9 +421,9 @@ export default function ContractCompliance() {
                     </Table>
                   </div>
                 )}
-                {filteredExclusionData.length > 100 && (
+                {filteredBenefitData.length > 100 && (
                   <p className="text-sm text-muted-foreground mt-4 text-center">
-                    Showing first 100 of {filteredExclusionData.length.toLocaleString()} drugs
+                    Showing first 100 of {filteredBenefitData.length.toLocaleString()} drugs
                   </p>
                 )}
               </CardContent>

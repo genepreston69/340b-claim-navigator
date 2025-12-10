@@ -1,24 +1,24 @@
 -- =====================================================
--- Migration: Contract Pharmacy Exclusion & Medicaid Carve Analysis
+-- Migration: Pharmacy Benefit Comparison & Medicaid Carve Analysis
 -- Date: 2024-12-10
 -- Description:
---   1. Contract Pharmacy Exclusion Analysis - Identify drugs where
---      one pharmacy shows 340B benefit and another doesn't (manufacturer restrictions)
+--   1. Pharmacy Benefit Comparison - Show drugs where one pharmacy
+--      dispenses with 340B benefit but another doesn't
 --   2. Medicaid Carve-In vs Carve-Out Report - Separate Medicaid claims
 --      by 340B eligibility status
 -- =====================================================
 
 -- =====================================================
--- 1. CONTRACT PHARMACY EXCLUSION ANALYSIS
--- Identifies drugs where performance varies significantly across pharmacies
--- indicating potential manufacturer exclusions
+-- 1. PHARMACY BENEFIT COMPARISON
+-- Shows drugs dispensed with 340B benefit at one pharmacy
+-- but without benefit at another - indicates potential exclusion
 -- =====================================================
 
-CREATE OR REPLACE VIEW contract_pharmacy_exclusion_analysis
+CREATE OR REPLACE VIEW pharmacy_benefit_comparison
 WITH (security_invoker = true) AS
 
-WITH drug_pharmacy_performance AS (
-    -- Get performance metrics for each drug at each pharmacy
+WITH drug_pharmacy_stats AS (
+    -- Calculate benefit stats for each drug at each pharmacy
     SELECT
         ndc,
         drug_name,
@@ -27,117 +27,98 @@ WITH drug_pharmacy_performance AS (
         COUNT(*) AS claim_count,
         COALESCE(SUM(drug_cost_340b), 0) AS total_340b_cost,
         COALESCE(SUM(retail_drug_cost), 0) AS total_retail_cost,
-        COALESCE(SUM(profit_or_loss), 0) AS total_profit_loss,
-        COALESCE(AVG(profit_or_loss), 0) AS avg_profit_per_claim,
-        -- Flag if this pharmacy shows 340B benefit for this drug
-        CASE
-            WHEN COALESCE(AVG(profit_or_loss), 0) > 1 THEN true
-            ELSE false
-        END AS has_340b_benefit
+        COALESCE(SUM(profit_or_loss), 0) AS total_benefit,
+        COALESCE(AVG(profit_or_loss), 0) AS avg_benefit_per_claim,
+        -- Has benefit if average profit is positive
+        CASE WHEN COALESCE(AVG(profit_or_loss), 0) > 0 THEN true ELSE false END AS has_benefit
     FROM claims
     WHERE ndc IS NOT NULL
       AND pharmacy_name IS NOT NULL
       AND fill_date >= CURRENT_DATE - INTERVAL '12 months'
     GROUP BY ndc, drug_name, pharmacy_id, pharmacy_name
-    HAVING COUNT(*) >= 3  -- Minimum claims for meaningful analysis
+    HAVING COUNT(*) >= 2  -- At least 2 claims
 ),
 
-drug_summary AS (
-    -- Summarize each drug across all pharmacies
-    SELECT
-        ndc,
-        drug_name,
-        COUNT(DISTINCT pharmacy_id) AS pharmacy_count,
-        SUM(claim_count) AS total_claims,
-        SUM(CASE WHEN has_340b_benefit THEN 1 ELSE 0 END) AS pharmacies_with_benefit,
-        SUM(CASE WHEN NOT has_340b_benefit THEN 1 ELSE 0 END) AS pharmacies_without_benefit,
-        -- Flag drugs where some pharmacies have benefit and others don't
-        CASE
-            WHEN SUM(CASE WHEN has_340b_benefit THEN 1 ELSE 0 END) > 0
-             AND SUM(CASE WHEN NOT has_340b_benefit THEN 1 ELSE 0 END) > 0
-            THEN true
-            ELSE false
-        END AS has_exclusion_pattern
-    FROM drug_pharmacy_performance
-    GROUP BY ndc, drug_name
+drugs_with_mixed_benefit AS (
+    -- Find drugs that have benefit at some pharmacies but not others
+    SELECT DISTINCT ndc
+    FROM drug_pharmacy_stats
+    GROUP BY ndc
+    HAVING
+        SUM(CASE WHEN has_benefit THEN 1 ELSE 0 END) > 0  -- At least one pharmacy with benefit
+        AND SUM(CASE WHEN NOT has_benefit THEN 1 ELSE 0 END) > 0  -- At least one without
 )
 
 SELECT
-    dpp.ndc,
-    dpp.drug_name,
-    dpp.pharmacy_id,
-    dpp.pharmacy_name,
-    dpp.claim_count,
-    dpp.total_340b_cost,
-    dpp.total_retail_cost,
-    dpp.total_profit_loss,
-    dpp.avg_profit_per_claim,
-    dpp.has_340b_benefit,
-    ds.pharmacy_count AS total_pharmacies_dispensing,
-    ds.pharmacies_with_benefit,
-    ds.pharmacies_without_benefit,
-    ds.has_exclusion_pattern,
-    -- Estimated lost revenue if this pharmacy is excluded
+    dps.ndc,
+    dps.drug_name,
+    dps.pharmacy_id,
+    dps.pharmacy_name,
+    dps.claim_count,
+    dps.total_340b_cost,
+    dps.total_retail_cost,
+    dps.total_benefit,
+    dps.avg_benefit_per_claim,
+    dps.has_benefit,
     CASE
-        WHEN NOT dpp.has_340b_benefit AND ds.pharmacies_with_benefit > 0 THEN
-            -- Estimate based on average benefit at other pharmacies
-            dpp.claim_count * (
-                SELECT COALESCE(AVG(avg_profit_per_claim), 0)
-                FROM drug_pharmacy_performance dpp2
-                WHERE dpp2.ndc = dpp.ndc AND dpp2.has_340b_benefit = true
-            )
-        ELSE 0
-    END AS estimated_lost_revenue,
-    -- Exclusion status
-    CASE
-        WHEN ds.has_exclusion_pattern AND NOT dpp.has_340b_benefit THEN 'Potentially Excluded'
-        WHEN ds.has_exclusion_pattern AND dpp.has_340b_benefit THEN 'Active 340B'
-        WHEN NOT ds.has_exclusion_pattern AND dpp.has_340b_benefit THEN 'Active 340B (All Pharmacies)'
-        ELSE 'No 340B Benefit (All Pharmacies)'
-    END AS exclusion_status
-FROM drug_pharmacy_performance dpp
-JOIN drug_summary ds ON dpp.ndc = ds.ndc
-ORDER BY ds.has_exclusion_pattern DESC, dpp.drug_name, dpp.pharmacy_name;
+        WHEN dps.has_benefit THEN 'With 340B Benefit'
+        ELSE 'No 340B Benefit'
+    END AS benefit_status,
+    -- Count of pharmacies for this drug
+    (SELECT COUNT(DISTINCT pharmacy_id) FROM drug_pharmacy_stats WHERE ndc = dps.ndc) AS total_pharmacies,
+    (SELECT COUNT(DISTINCT pharmacy_id) FROM drug_pharmacy_stats WHERE ndc = dps.ndc AND has_benefit) AS pharmacies_with_benefit,
+    (SELECT COUNT(DISTINCT pharmacy_id) FROM drug_pharmacy_stats WHERE ndc = dps.ndc AND NOT has_benefit) AS pharmacies_without_benefit
+FROM drug_pharmacy_stats dps
+WHERE dps.ndc IN (SELECT ndc FROM drugs_with_mixed_benefit)
+ORDER BY dps.drug_name, dps.has_benefit DESC, dps.claim_count DESC;
 
 -- =====================================================
--- 2. EXCLUSION SUMMARY BY DRUG
--- High-level view of drugs with potential exclusions
+-- 2. DRUG BENEFIT SUMMARY
+-- Summary view showing drugs with inconsistent benefit across pharmacies
 -- =====================================================
 
-CREATE OR REPLACE VIEW drug_exclusion_summary
+CREATE OR REPLACE VIEW drug_benefit_summary
 WITH (security_invoker = true) AS
+
+WITH drug_pharmacy_stats AS (
+    SELECT
+        ndc,
+        drug_name,
+        pharmacy_id,
+        pharmacy_name,
+        COUNT(*) AS claim_count,
+        COALESCE(SUM(profit_or_loss), 0) AS total_benefit,
+        CASE WHEN COALESCE(AVG(profit_or_loss), 0) > 0 THEN true ELSE false END AS has_benefit
+    FROM claims
+    WHERE ndc IS NOT NULL
+      AND pharmacy_name IS NOT NULL
+      AND fill_date >= CURRENT_DATE - INTERVAL '12 months'
+    GROUP BY ndc, drug_name, pharmacy_id, pharmacy_name
+    HAVING COUNT(*) >= 2
+)
 
 SELECT
     ndc,
     drug_name,
     COUNT(DISTINCT pharmacy_id) AS total_pharmacies,
-    COUNT(DISTINCT CASE WHEN has_340b_benefit THEN pharmacy_id END) AS pharmacies_with_benefit,
-    COUNT(DISTINCT CASE WHEN NOT has_340b_benefit THEN pharmacy_id END) AS pharmacies_excluded,
+    COUNT(DISTINCT CASE WHEN has_benefit THEN pharmacy_id END) AS pharmacies_with_benefit,
+    COUNT(DISTINCT CASE WHEN NOT has_benefit THEN pharmacy_id END) AS pharmacies_without_benefit,
     SUM(claim_count) AS total_claims,
-    SUM(CASE WHEN has_340b_benefit THEN claim_count ELSE 0 END) AS claims_with_benefit,
-    SUM(CASE WHEN NOT has_340b_benefit THEN claim_count ELSE 0 END) AS claims_without_benefit,
-    SUM(total_profit_loss) AS total_profit_loss,
-    SUM(CASE WHEN NOT has_340b_benefit THEN estimated_lost_revenue ELSE 0 END) AS total_estimated_lost_revenue,
-    CASE
-        WHEN COUNT(DISTINCT CASE WHEN has_340b_benefit THEN pharmacy_id END) > 0
-         AND COUNT(DISTINCT CASE WHEN NOT has_340b_benefit THEN pharmacy_id END) > 0
-        THEN 'Partial Exclusion'
-        WHEN COUNT(DISTINCT CASE WHEN has_340b_benefit THEN pharmacy_id END) = 0
-        THEN 'Fully Excluded'
-        ELSE 'No Exclusion'
-    END AS exclusion_status
-FROM contract_pharmacy_exclusion_analysis
+    SUM(CASE WHEN has_benefit THEN claim_count ELSE 0 END) AS claims_with_benefit,
+    SUM(CASE WHEN NOT has_benefit THEN claim_count ELSE 0 END) AS claims_without_benefit,
+    SUM(total_benefit) AS total_benefit,
+    -- List pharmacies with benefit
+    STRING_AGG(DISTINCT CASE WHEN has_benefit THEN pharmacy_name END, ', ') AS pharmacies_with_benefit_list,
+    -- List pharmacies without benefit
+    STRING_AGG(DISTINCT CASE WHEN NOT has_benefit THEN pharmacy_name END, ', ') AS pharmacies_without_benefit_list
+FROM drug_pharmacy_stats
 GROUP BY ndc, drug_name
+HAVING
+    COUNT(DISTINCT CASE WHEN has_benefit THEN pharmacy_id END) > 0
+    AND COUNT(DISTINCT CASE WHEN NOT has_benefit THEN pharmacy_id END) > 0
 ORDER BY
-    CASE
-        WHEN COUNT(DISTINCT CASE WHEN has_340b_benefit THEN pharmacy_id END) > 0
-         AND COUNT(DISTINCT CASE WHEN NOT has_340b_benefit THEN pharmacy_id END) > 0
-        THEN 1  -- Partial exclusions first
-        WHEN COUNT(DISTINCT CASE WHEN has_340b_benefit THEN pharmacy_id END) = 0
-        THEN 2  -- Fully excluded second
-        ELSE 3  -- No exclusion last
-    END,
-    SUM(CASE WHEN NOT has_340b_benefit THEN estimated_lost_revenue ELSE 0 END) DESC;
+    SUM(CASE WHEN NOT has_benefit THEN claim_count ELSE 0 END) DESC,
+    drug_name;
 
 -- =====================================================
 -- 3. MEDICAID CARVE-IN VS CARVE-OUT ANALYSIS
@@ -296,10 +277,17 @@ GROUP BY DATE_TRUNC('month', fill_date)
 ORDER BY month DESC;
 
 -- =====================================================
--- 5. GRANT PERMISSIONS
+-- 5. DROP OLD VIEWS (if they exist)
 -- =====================================================
 
-GRANT SELECT ON contract_pharmacy_exclusion_analysis TO authenticated;
-GRANT SELECT ON drug_exclusion_summary TO authenticated;
+DROP VIEW IF EXISTS contract_pharmacy_exclusion_analysis CASCADE;
+DROP VIEW IF EXISTS drug_exclusion_summary CASCADE;
+
+-- =====================================================
+-- 6. GRANT PERMISSIONS
+-- =====================================================
+
+GRANT SELECT ON pharmacy_benefit_comparison TO authenticated;
+GRANT SELECT ON drug_benefit_summary TO authenticated;
 GRANT SELECT ON medicaid_carve_analysis TO authenticated;
 GRANT SELECT ON medicaid_carve_summary TO authenticated;

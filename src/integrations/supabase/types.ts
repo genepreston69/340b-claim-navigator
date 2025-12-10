@@ -1158,7 +1158,7 @@ export type Database = {
           },
         ]
       }
-      contract_pharmacy_exclusion_analysis: {
+      pharmacy_benefit_comparison: {
         Row: {
           ndc: number | null
           drug_name: string | null
@@ -1167,31 +1167,29 @@ export type Database = {
           claim_count: number | null
           total_340b_cost: number | null
           total_retail_cost: number | null
-          total_profit_loss: number | null
-          avg_profit_per_claim: number | null
-          has_340b_benefit: boolean | null
-          total_pharmacies_dispensing: number | null
+          total_benefit: number | null
+          avg_benefit_per_claim: number | null
+          has_benefit: boolean | null
+          benefit_status: string | null
+          total_pharmacies: number | null
           pharmacies_with_benefit: number | null
           pharmacies_without_benefit: number | null
-          has_exclusion_pattern: boolean | null
-          estimated_lost_revenue: number | null
-          exclusion_status: string | null
         }
         Relationships: []
       }
-      drug_exclusion_summary: {
+      drug_benefit_summary: {
         Row: {
           ndc: number | null
           drug_name: string | null
           total_pharmacies: number | null
           pharmacies_with_benefit: number | null
-          pharmacies_excluded: number | null
+          pharmacies_without_benefit: number | null
           total_claims: number | null
           claims_with_benefit: number | null
           claims_without_benefit: number | null
-          total_profit_loss: number | null
-          total_estimated_lost_revenue: number | null
-          exclusion_status: string | null
+          total_benefit: number | null
+          pharmacies_with_benefit_list: string | null
+          pharmacies_without_benefit_list: string | null
         }
         Relationships: []
       }
