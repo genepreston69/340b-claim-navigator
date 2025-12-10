@@ -744,6 +744,87 @@ export type Database = {
         }
         Relationships: []
       }
+      import_logs: {
+        Row: {
+          id: string
+          user_id: string | null
+          file_name: string
+          file_type: "Scripts" | "Claims"
+          file_size_bytes: number | null
+          status: "Processing" | "Success" | "Failed" | "Partial"
+          total_records: number | null
+          records_imported: number | null
+          records_skipped: number | null
+          records_failed: number | null
+          covered_entities_created: number | null
+          pharmacies_created: number | null
+          prescribers_created: number | null
+          patients_created: number | null
+          drugs_created: number | null
+          locations_created: number | null
+          insurance_plans_created: number | null
+          error_message: string | null
+          errors_json: Json | null
+          started_at: string | null
+          completed_at: string | null
+          duration_ms: number | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          file_name: string
+          file_type: "Scripts" | "Claims"
+          file_size_bytes?: number | null
+          status?: "Processing" | "Success" | "Failed" | "Partial"
+          total_records?: number | null
+          records_imported?: number | null
+          records_skipped?: number | null
+          records_failed?: number | null
+          covered_entities_created?: number | null
+          pharmacies_created?: number | null
+          prescribers_created?: number | null
+          patients_created?: number | null
+          drugs_created?: number | null
+          locations_created?: number | null
+          insurance_plans_created?: number | null
+          error_message?: string | null
+          errors_json?: Json | null
+          started_at?: string | null
+          completed_at?: string | null
+          duration_ms?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          file_name?: string
+          file_type?: "Scripts" | "Claims"
+          file_size_bytes?: number | null
+          status?: "Processing" | "Success" | "Failed" | "Partial"
+          total_records?: number | null
+          records_imported?: number | null
+          records_skipped?: number | null
+          records_failed?: number | null
+          covered_entities_created?: number | null
+          pharmacies_created?: number | null
+          prescribers_created?: number | null
+          patients_created?: number | null
+          drugs_created?: number | null
+          locations_created?: number | null
+          insurance_plans_created?: number | null
+          error_message?: string | null
+          errors_json?: Json | null
+          started_at?: string | null
+          completed_at?: string | null
+          duration_ms?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       adherence_filter_options: {
@@ -769,6 +850,14 @@ export type Database = {
         Row: {
           filter_type: string | null
           filter_value: string | null
+        }
+        Relationships: []
+      }
+      scripts_filter_options: {
+        Row: {
+          filter_type: string | null
+          filter_value: string | null
+          count: number | null
         }
         Relationships: []
       }

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Upload, FileSpreadsheet, FileText, CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, CheckCircle2, XCircle, Loader2, Clock, RefreshCw } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,63 +20,25 @@ import { parseClaimsFile, ClaimParseProgress } from "@/utils/claimsParser";
 import { processScriptsImport, processClaimsImport, ImportSummary } from "@/utils/etlProcessor";
 import { ImportSummaryModal } from "@/components/import/ImportSummaryModal";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { Tables } from "@/integrations/supabase/types";
+import { format } from "date-fns";
 
-interface ImportHistoryItem {
-  id: string;
-  importDate: string;
-  fileName: string;
-  fileType: "Scripts" | "Claims";
-  recordsProcessed: number;
-  status: "Success" | "Failed" | "Processing";
-}
+type ImportLog = Tables<"import_logs">;
 
-// Mock import history data
-const mockImportHistory: ImportHistoryItem[] = [
-  {
-    id: "1",
-    importDate: "2024-12-08 14:30",
-    fileName: "combinedscript_dec2024.xlsx",
-    fileType: "Scripts",
-    recordsProcessed: 1247,
-    status: "Success",
-  },
-  {
-    id: "2",
-    importDate: "2024-12-08 14:25",
-    fileName: "ClaimReports_Q4_2024.csv",
-    fileType: "Claims",
-    recordsProcessed: 3892,
-    status: "Success",
-  },
-  {
-    id: "3",
-    importDate: "2024-12-07 09:15",
-    fileName: "combinedscript_nov2024.xlsx",
-    fileType: "Scripts",
-    recordsProcessed: 0,
-    status: "Failed",
-  },
-  {
-    id: "4",
-    importDate: "2024-12-06 16:45",
-    fileName: "ClaimReports_Nov_2024.csv",
-    fileType: "Claims",
-    recordsProcessed: 2156,
-    status: "Success",
-  },
-];
-
-const StatusBadge = ({ status }: { status: ImportHistoryItem["status"] }) => {
+const StatusBadge = ({ status }: { status: ImportLog["status"] }) => {
   const variants = {
     Success: "bg-success/10 text-success border-success/20",
     Failed: "bg-destructive/10 text-destructive border-destructive/20",
     Processing: "bg-warning/10 text-warning border-warning/20",
+    Partial: "bg-orange-500/10 text-orange-500 border-orange-500/20",
   };
 
   const icons = {
     Success: <CheckCircle2 className="h-3.5 w-3.5" />,
     Failed: <XCircle className="h-3.5 w-3.5" />,
     Processing: <Loader2 className="h-3.5 w-3.5 animate-spin" />,
+    Partial: <CheckCircle2 className="h-3.5 w-3.5" />,
   };
 
   return (
@@ -86,10 +49,10 @@ const StatusBadge = ({ status }: { status: ImportHistoryItem["status"] }) => {
   );
 };
 
-const FileTypeBadge = ({ type }: { type: ImportHistoryItem["fileType"] }) => {
+const FileTypeBadge = ({ type }: { type: ImportLog["file_type"] }) => {
   return (
-    <Badge 
-      variant="secondary" 
+    <Badge
+      variant="secondary"
       className={cn(
         "gap-1.5",
         type === "Scripts" ? "bg-primary/10 text-primary" : "bg-accent/10 text-accent"
@@ -263,27 +226,149 @@ const FileUploadSection = ({
 
 const DataImport = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [scriptsFile, setScriptsFile] = useState<File | null>(null);
   const [claimsFile, setClaimsFile] = useState<File | null>(null);
   const [scriptsProgress, setScriptsProgress] = useState<ParseProgress | null>(null);
   const [claimsProgress, setClaimsProgress] = useState<ParseProgress | null>(null);
   const [isProcessingScripts, setIsProcessingScripts] = useState(false);
   const [isProcessingClaims, setIsProcessingClaims] = useState(false);
-  
+
   // Import summary modal state
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [summaryFileType, setSummaryFileType] = useState<"Scripts" | "Claims">("Scripts");
   const [summaryFileName, setSummaryFileName] = useState("");
 
+  // Fetch import history from database
+  const { data: importHistory, isLoading: isLoadingHistory, refetch: refetchHistory } = useQuery({
+    queryKey: ["import-logs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("import_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      return data as ImportLog[];
+    },
+  });
+
+  // Create import log mutation
+  const createImportLog = useMutation({
+    mutationFn: async (params: {
+      fileName: string;
+      fileType: "Scripts" | "Claims";
+      fileSize: number;
+    }) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const { data, error } = await supabase
+        .from("import_logs")
+        .insert({
+          user_id: userData.user?.id,
+          file_name: params.fileName,
+          file_type: params.fileType,
+          file_size_bytes: params.fileSize,
+          status: "Processing",
+          started_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as ImportLog;
+    },
+  });
+
+  // Update import log mutation
+  const updateImportLog = useMutation({
+    mutationFn: async (params: {
+      id: string;
+      summary: ImportSummary;
+      startedAt: Date;
+    }) => {
+      const completedAt = new Date();
+      const durationMs = completedAt.getTime() - params.startedAt.getTime();
+
+      const status: ImportLog["status"] =
+        params.summary.errors.length > 0 && params.summary.recordsImported === 0
+          ? "Failed"
+          : params.summary.errors.length > 0
+          ? "Partial"
+          : "Success";
+
+      const { error } = await supabase
+        .from("import_logs")
+        .update({
+          status,
+          total_records: params.summary.totalRecords,
+          records_imported: params.summary.recordsImported,
+          records_skipped: params.summary.recordsSkipped,
+          records_failed: params.summary.errors.length,
+          covered_entities_created: params.summary.referenceDataCreated.coveredEntities,
+          pharmacies_created: params.summary.referenceDataCreated.pharmacies,
+          prescribers_created: params.summary.referenceDataCreated.prescribers,
+          patients_created: params.summary.referenceDataCreated.patients,
+          drugs_created: params.summary.referenceDataCreated.drugs,
+          locations_created: params.summary.referenceDataCreated.locations,
+          insurance_plans_created: params.summary.referenceDataCreated.insurancePlans,
+          errors_json: params.summary.errors.slice(0, 100), // Store first 100 errors
+          completed_at: completedAt.toISOString(),
+          duration_ms: durationMs,
+        })
+        .eq("id", params.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["import-logs"] });
+    },
+  });
+
+  // Mark import as failed mutation
+  const markImportFailed = useMutation({
+    mutationFn: async (params: { id: string; errorMessage: string; startedAt: Date }) => {
+      const completedAt = new Date();
+      const durationMs = completedAt.getTime() - params.startedAt.getTime();
+
+      const { error } = await supabase
+        .from("import_logs")
+        .update({
+          status: "Failed",
+          error_message: params.errorMessage,
+          completed_at: completedAt.toISOString(),
+          duration_ms: durationMs,
+        })
+        .eq("id", params.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["import-logs"] });
+    },
+  });
+
   const handleProcessScripts = async () => {
     if (!scriptsFile) return;
 
     const fileName = scriptsFile.name;
+    const fileSize = scriptsFile.size;
+    const startedAt = new Date();
+    let importLogId: string | null = null;
+
     setIsProcessingScripts(true);
     setScriptsProgress(null);
 
     try {
+      // Create import log entry
+      const importLog = await createImportLog.mutateAsync({
+        fileName,
+        fileType: "Scripts",
+        fileSize,
+      });
+      importLogId = importLog.id;
+
       // Step 1: Parse the Excel file
       setScriptsProgress({
         current: 0,
@@ -292,7 +377,7 @@ const DataImport = () => {
         status: "reading",
         message: "Parsing Excel file...",
       });
-      
+
       const prescriptions = await parseScriptsFile(scriptsFile, (progress) => {
         // Scale parsing progress to 0-30%
         setScriptsProgress({
@@ -303,6 +388,11 @@ const DataImport = () => {
       });
 
       if (prescriptions.length === 0) {
+        await markImportFailed.mutateAsync({
+          id: importLogId,
+          errorMessage: "No valid prescription records found in file",
+          startedAt,
+        });
         toast({
           title: "No Records Found",
           description: "The file contains no valid prescription records to import.",
@@ -324,14 +414,28 @@ const DataImport = () => {
         });
       });
 
+      // Update import log with results
+      await updateImportLog.mutateAsync({
+        id: importLogId,
+        summary,
+        startedAt,
+      });
+
       // Show summary modal
       setImportSummary(summary);
       setSummaryFileType("Scripts");
       setSummaryFileName(fileName);
       setSummaryModalOpen(true);
-      
+
       setScriptsFile(null);
     } catch (error) {
+      if (importLogId) {
+        await markImportFailed.mutateAsync({
+          id: importLogId,
+          errorMessage: error instanceof Error ? error.message : "Unknown error occurred",
+          startedAt,
+        });
+      }
       toast({
         title: "Error Processing Scripts",
         description: error instanceof Error ? error.message : "Failed to process the Excel file",
@@ -347,10 +451,22 @@ const DataImport = () => {
     if (!claimsFile) return;
 
     const fileName = claimsFile.name;
+    const fileSize = claimsFile.size;
+    const startedAt = new Date();
+    let importLogId: string | null = null;
+
     setIsProcessingClaims(true);
     setClaimsProgress(null);
 
     try {
+      // Create import log entry
+      const importLog = await createImportLog.mutateAsync({
+        fileName,
+        fileType: "Claims",
+        fileSize,
+      });
+      importLogId = importLog.id;
+
       // Step 1: Parse the CSV file
       setClaimsProgress({
         current: 0,
@@ -370,6 +486,11 @@ const DataImport = () => {
       });
 
       if (claims.length === 0) {
+        await markImportFailed.mutateAsync({
+          id: importLogId,
+          errorMessage: "No valid claim records found in file",
+          startedAt,
+        });
         toast({
           title: "No Records Found",
           description: "The file contains no valid claim records to import.",
@@ -391,14 +512,28 @@ const DataImport = () => {
         });
       });
 
+      // Update import log with results
+      await updateImportLog.mutateAsync({
+        id: importLogId,
+        summary,
+        startedAt,
+      });
+
       // Show summary modal
       setImportSummary(summary);
       setSummaryFileType("Claims");
       setSummaryFileName(fileName);
       setSummaryModalOpen(true);
-      
+
       setClaimsFile(null);
     } catch (error) {
+      if (importLogId) {
+        await markImportFailed.mutateAsync({
+          id: importLogId,
+          errorMessage: error instanceof Error ? error.message : "Unknown error occurred",
+          startedAt,
+        });
+      }
       toast({
         title: "Error Processing Claims",
         description: error instanceof Error ? error.message : "Failed to process the CSV file",
@@ -407,6 +542,15 @@ const DataImport = () => {
     } finally {
       setIsProcessingClaims(false);
       setClaimsProgress(null);
+    }
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    try {
+      return format(new Date(dateStr), "yyyy-MM-dd HH:mm");
+    } catch {
+      return dateStr;
     }
   };
 
@@ -455,14 +599,25 @@ const DataImport = () => {
         {/* Import History */}
         <Card>
           <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                <Clock className="h-5 w-5 text-secondary-foreground" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
+                  <Clock className="h-5 w-5 text-secondary-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Import History</CardTitle>
+                  <CardDescription>Recent file imports and their processing status</CardDescription>
+                </div>
               </div>
-              <div>
-                <CardTitle className="text-lg">Import History</CardTitle>
-                <CardDescription>Recent file imports and their processing status</CardDescription>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchHistory()}
+                disabled={isLoadingHistory}
+              >
+                <RefreshCw className={cn("h-4 w-4 mr-2", isLoadingHistory && "animate-spin")} />
+                Refresh
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -474,27 +629,57 @@ const DataImport = () => {
                     <TableHead>File Name</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Records</TableHead>
+                    <TableHead className="text-right">Duration</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockImportHistory.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium text-muted-foreground">
-                        {item.importDate}
-                      </TableCell>
-                      <TableCell className="font-medium">{item.fileName}</TableCell>
-                      <TableCell>
-                        <FileTypeBadge type={item.fileType} />
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {item.recordsProcessed.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={item.status} />
+                  {isLoadingHistory ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                        <p className="mt-2 text-sm text-muted-foreground">Loading import history...</p>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : importHistory && importHistory.length > 0 ? (
+                    importHistory.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium text-muted-foreground">
+                          {formatDate(item.created_at)}
+                        </TableCell>
+                        <TableCell className="font-medium max-w-[200px] truncate" title={item.file_name}>
+                          {item.file_name}
+                        </TableCell>
+                        <TableCell>
+                          <FileTypeBadge type={item.file_type} />
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {item.records_imported?.toLocaleString() ?? 0}
+                          {item.records_skipped && item.records_skipped > 0 && (
+                            <span className="text-muted-foreground text-xs ml-1">
+                              ({item.records_skipped} skipped)
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {item.duration_ms
+                            ? item.duration_ms < 1000
+                              ? `${item.duration_ms}ms`
+                              : `${(item.duration_ms / 1000).toFixed(1)}s`
+                            : "-"}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={item.status} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No import history found. Import your first file above.
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
