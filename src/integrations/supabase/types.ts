@@ -834,6 +834,22 @@ export type Database = {
           },
         ]
       }
+      drug_benefit_summary: {
+        Row: {
+          claims_with_benefit: number | null
+          claims_without_benefit: number | null
+          drug_name: string | null
+          ndc: number | null
+          pharmacies_with_benefit: number | null
+          pharmacies_with_benefit_list: string | null
+          pharmacies_without_benefit: number | null
+          pharmacies_without_benefit_list: string | null
+          total_benefit: number | null
+          total_claims: number | null
+          total_pharmacies: number | null
+        }
+        Relationships: []
+      }
       drug_pharmacy_comparison: {
         Row: {
           avg_payment_per_claim: number | null
@@ -881,6 +897,39 @@ export type Database = {
             referencedColumns: ["pharmacy_id"]
           },
         ]
+      }
+      medicaid_carve_analysis: {
+        Row: {
+          carve_status: string | null
+          claim_count: number | null
+          drug_name: string | null
+          month: string | null
+          ndc: number | null
+          pharmacy_name: string | null
+          total_340b_cost: number | null
+          total_patient_pay: number | null
+          total_payments: number | null
+          total_profit_loss: number | null
+          total_quantity: number | null
+          total_retail_cost: number | null
+          total_third_party_pay: number | null
+        }
+        Relationships: []
+      }
+      medicaid_carve_summary: {
+        Row: {
+          carve_out_rate_pct: number | null
+          carved_in_benefit: number | null
+          carved_in_claims: number | null
+          carved_in_payments: number | null
+          carved_out_claims: number | null
+          carved_out_payments: number | null
+          month: string | null
+          non_medicaid_benefit: number | null
+          non_medicaid_claims: number | null
+          total_medicaid_claims: number | null
+        }
+        Relationships: []
       }
       monthly_adherence_trends: {
         Row: {
@@ -942,6 +991,40 @@ export type Database = {
           total_payments: number | null
           total_retail_cost: number | null
           total_third_party_payment: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacy_contract_compliance"
+            referencedColumns: ["pharmacy_id"]
+          },
+        ]
+      }
+      pharmacy_benefit_comparison: {
+        Row: {
+          avg_benefit_per_claim: number | null
+          benefit_status: string | null
+          claim_count: number | null
+          drug_name: string | null
+          has_benefit: boolean | null
+          ndc: number | null
+          pharmacies_with_benefit: number | null
+          pharmacies_without_benefit: number | null
+          pharmacy_id: string | null
+          pharmacy_name: string | null
+          total_340b_cost: number | null
+          total_benefit: number | null
+          total_pharmacies: number | null
+          total_retail_cost: number | null
         }
         Relationships: [
           {
