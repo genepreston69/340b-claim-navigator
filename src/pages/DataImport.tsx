@@ -21,10 +21,31 @@ import { processScriptsImport, processClaimsImport, ImportSummary } from "@/util
 import { ImportSummaryModal } from "@/components/import/ImportSummaryModal";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Tables } from "@/integrations/supabase/types";
 import { format } from "date-fns";
 
-type ImportLog = Tables<"import_logs">;
+// Define ImportLog type locally since it may not be in generated types yet
+interface ImportLog {
+  id: string;
+  user_id: string | null;
+  file_name: string;
+  file_type: "Scripts" | "Claims";
+  file_size: number | null;
+  status: "Processing" | "Success" | "Failed" | "Partial";
+  records_imported: number | null;
+  records_skipped: number | null;
+  covered_entities_created: number | null;
+  pharmacies_created: number | null;
+  prescribers_created: number | null;
+  patients_created: number | null;
+  drugs_created: number | null;
+  locations_created: number | null;
+  insurance_plans_created: number | null;
+  errors_json: unknown;
+  completed_at: string | null;
+  duration_ms: number | null;
+  created_at: string;
+  updated_at: string;
+}
 
 const StatusBadge = ({ status }: { status: ImportLog["status"] }) => {
   const variants = {
@@ -244,14 +265,14 @@ const DataImport = () => {
   const { data: importHistory, isLoading: isLoadingHistory, refetch: refetchHistory } = useQuery({
     queryKey: ["import-logs"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("import_logs")
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (error) throw error;
-      return data as ImportLog[];
+      return (data || []) as ImportLog[];
     },
   });
 
@@ -263,7 +284,7 @@ const DataImport = () => {
       fileSize: number;
     }) => {
       const { data: userData } = await supabase.auth.getUser();
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("import_logs")
         .insert({
           user_id: userData.user?.id,
@@ -277,7 +298,7 @@ const DataImport = () => {
         .single();
 
       if (error) throw error;
-      return data as ImportLog;
+      return data as unknown as ImportLog;
     },
   });
 
@@ -298,7 +319,7 @@ const DataImport = () => {
           ? "Partial"
           : "Success";
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("import_logs")
         .update({
           status,
@@ -313,7 +334,7 @@ const DataImport = () => {
           drugs_created: params.summary.referenceDataCreated.drugs,
           locations_created: params.summary.referenceDataCreated.locations,
           insurance_plans_created: params.summary.referenceDataCreated.insurancePlans,
-          errors_json: params.summary.errors.slice(0, 100), // Store first 100 errors
+          errors_json: params.summary.errors.slice(0, 100),
           completed_at: completedAt.toISOString(),
           duration_ms: durationMs,
         })
@@ -332,7 +353,7 @@ const DataImport = () => {
       const completedAt = new Date();
       const durationMs = completedAt.getTime() - params.startedAt.getTime();
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("import_logs")
         .update({
           status: "Failed",
