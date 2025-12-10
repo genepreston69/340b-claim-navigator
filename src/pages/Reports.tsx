@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, FileText, TrendingUp, Building2, PieChart } from "lucide-react";
+import { Download, FileText, TrendingUp, Building2, PieChart, FileSpreadsheet } from "lucide-react";
 import {
   BarChart,
   Bar,
@@ -23,6 +23,8 @@ import {
   Legend,
 } from "recharts";
 import { format, parseISO } from "date-fns";
+import { DateRangePicker, useDateRange } from "@/components/ui/date-range-picker";
+import { exportToExcel, exportToCSV, financialSummaryColumns, type ExportColumn } from "@/utils/exportUtils";
 
 interface MonthlyFinancialSummary {
   month: string;
@@ -84,40 +86,70 @@ const formatMonth = (dateStr: string) => {
 };
 
 export default function Reports() {
-  // Fetch monthly financial summary from view
+  // Date range state
+  const { dateRange, setDateRange, fromDate, toDate } = useDateRange("last6months");
+
+  // Fetch monthly financial summary from view with date filtering
   const { data: monthlySummary = [], isLoading: monthlySummaryLoading } = useQuery({
-    queryKey: ["monthly-financial-summary"],
+    queryKey: ["monthly-financial-summary", fromDate, toDate],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("monthly_financial_summary")
         .select("*")
         .order("month", { ascending: true });
+
+      if (fromDate) {
+        query = query.gte("month", fromDate.substring(0, 7) + "-01");
+      }
+      if (toDate) {
+        query = query.lte("month", toDate.substring(0, 7) + "-01");
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []) as MonthlyFinancialSummary[];
     },
   });
 
-  // Fetch monthly pharmacy summary from view
+  // Fetch monthly pharmacy summary from view with date filtering
   const { data: pharmacySummary = [], isLoading: pharmacySummaryLoading } = useQuery({
-    queryKey: ["monthly-pharmacy-summary"],
+    queryKey: ["monthly-pharmacy-summary", fromDate, toDate],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("monthly_pharmacy_summary")
         .select("*")
         .order("month", { ascending: false });
+
+      if (fromDate) {
+        query = query.gte("month", fromDate.substring(0, 7) + "-01");
+      }
+      if (toDate) {
+        query = query.lte("month", toDate.substring(0, 7) + "-01");
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []) as MonthlyPharmacySummary[];
     },
   });
 
-  // Fetch monthly payer summary from view
+  // Fetch monthly payer summary from view with date filtering
   const { data: payerSummary = [], isLoading: payerSummaryLoading } = useQuery({
-    queryKey: ["monthly-payer-summary"],
+    queryKey: ["monthly-payer-summary", fromDate, toDate],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("monthly_payer_summary")
         .select("*")
         .order("month", { ascending: false });
+
+      if (fromDate) {
+        query = query.gte("month", fromDate.substring(0, 7) + "-01");
+      }
+      if (toDate) {
+        query = query.lte("month", toDate.substring(0, 7) + "-01");
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return (data || []) as MonthlyPayerSummary[];
     },
@@ -193,29 +225,90 @@ export default function Reports() {
     "340B Benefit": Number(item.benefit_340b) || 0,
   }));
 
-  // Export functions
-  const exportToCSV = (data: Record<string, unknown>[], filename: string) => {
-    if (data.length === 0) return;
+  // Export handlers
+  const handleExportSavingsCSV = () => {
+    const columns: ExportColumn<MonthlyFinancialSummary>[] = [
+      { header: "Month", accessor: "month", format: "date" },
+      { header: "Total Claims", accessor: "total_claims", format: "number" },
+      { header: "Total Payments", accessor: "total_payments", format: "currency" },
+      { header: "340B Cost", accessor: "total_340b_cost", format: "currency" },
+      { header: "Dispensing Fees", accessor: "total_dispensing_fees", format: "currency" },
+      { header: "340B Benefit", accessor: "benefit_340b", format: "currency" },
+    ];
+    exportToCSV(monthlySummary, columns, { filename: "340b-savings-analysis", includeTimestamp: true });
+  };
 
-    const headers = Object.keys(data[0]);
-    const csvContent = [
-      headers.join(","),
-      ...data.map((row) =>
-        headers.map((header) => {
-          const value = row[header];
-          if (typeof value === "number") {
-            return value.toFixed(2);
-          }
-          return `"${value}"`;
-        }).join(",")
-      ),
-    ].join("\n");
+  const handleExportSavingsExcel = () => {
+    const columns: ExportColumn<MonthlyFinancialSummary>[] = [
+      { header: "Month", accessor: "month", format: "date", width: 12 },
+      { header: "Total Claims", accessor: "total_claims", format: "number", width: 14 },
+      { header: "Total Payments", accessor: "total_payments", format: "currency", width: 16 },
+      { header: "340B Cost", accessor: "total_340b_cost", format: "currency", width: 14 },
+      { header: "Retail Cost", accessor: "total_retail_cost", format: "currency", width: 14 },
+      { header: "Gross Savings", accessor: "gross_savings", format: "currency", width: 14 },
+      { header: "Dispensing Fees", accessor: "total_dispensing_fees", format: "currency", width: 16 },
+      { header: "340B Benefit", accessor: "benefit_340b", format: "currency", width: 14 },
+      { header: "Patient Pay", accessor: "total_patient_pay", format: "currency", width: 14 },
+      { header: "Third Party", accessor: "total_third_party_payment", format: "currency", width: 14 },
+    ];
+    exportToExcel(monthlySummary, columns, {
+      filename: "340b-savings-analysis",
+      sheetName: "Monthly Summary",
+      includeTimestamp: true
+    });
+  };
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}.csv`;
-    link.click();
+  const handleExportPharmacyCSV = () => {
+    const columns: ExportColumn<typeof pharmacyPerformance[0]>[] = [
+      { header: "Pharmacy Name", accessor: "pharmacyName", width: 30 },
+      { header: "Total Claims", accessor: "totalClaims", format: "number" },
+      { header: "Total Payments", accessor: "totalPayments", format: "currency" },
+      { header: "340B Cost", accessor: "total340BCost", format: "currency" },
+      { header: "340B Benefit", accessor: "benefit340B", format: "currency" },
+    ];
+    exportToCSV(pharmacyPerformance, columns, { filename: "pharmacy-performance", includeTimestamp: true });
+  };
+
+  const handleExportPharmacyExcel = () => {
+    const columns: ExportColumn<typeof pharmacyPerformance[0]>[] = [
+      { header: "Pharmacy Name", accessor: "pharmacyName", width: 30 },
+      { header: "Total Claims", accessor: "totalClaims", format: "number", width: 14 },
+      { header: "Total Payments", accessor: "totalPayments", format: "currency", width: 16 },
+      { header: "340B Cost", accessor: "total340BCost", format: "currency", width: 14 },
+      { header: "340B Benefit", accessor: "benefit340B", format: "currency", width: 14 },
+      { header: "Months Active", accessor: "monthCount", format: "number", width: 14 },
+    ];
+    exportToExcel(pharmacyPerformance, columns, {
+      filename: "pharmacy-performance",
+      sheetName: "Pharmacy Summary",
+      includeTimestamp: true
+    });
+  };
+
+  const handleExportPayerCSV = () => {
+    const columns: ExportColumn<typeof payerMix[0]>[] = [
+      { header: "Payer Type", accessor: "payerType", width: 20 },
+      { header: "Claim Count", accessor: "claimCount", format: "number" },
+      { header: "% of Total", accessor: "percentOfTotal", format: "percent" },
+      { header: "Avg Payment", accessor: "avgPayment", format: "currency" },
+      { header: "Avg 340B Cost", accessor: "avg340BCost", format: "currency" },
+    ];
+    exportToCSV(payerMix, columns, { filename: "payer-mix-analysis", includeTimestamp: true });
+  };
+
+  const handleExportPayerExcel = () => {
+    const columns: ExportColumn<typeof payerMix[0]>[] = [
+      { header: "Payer Type", accessor: "payerType", width: 20 },
+      { header: "Claim Count", accessor: "claimCount", format: "number", width: 14 },
+      { header: "% of Total", accessor: "percentOfTotal", format: "percent", width: 12 },
+      { header: "Avg Payment", accessor: "avgPayment", format: "currency", width: 14 },
+      { header: "Avg 340B Cost", accessor: "avg340BCost", format: "currency", width: 14 },
+    ];
+    exportToExcel(payerMix, columns, {
+      filename: "payer-mix-analysis",
+      sheetName: "Payer Mix",
+      includeTimestamp: true
+    });
   };
 
   const exportToPDF = () => {
@@ -237,12 +330,20 @@ export default function Reports() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Financial Reports</h1>
-          <p className="text-muted-foreground">
-            Comprehensive 340B program financial analytics and performance metrics
-          </p>
+        {/* Header with Date Range */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Financial Reports</h1>
+            <p className="text-muted-foreground">
+              Comprehensive 340B program financial analytics and performance metrics
+            </p>
+          </div>
+          <DateRangePicker
+            value={dateRange}
+            onChange={setDateRange}
+            className="w-[280px]"
+            showPresets={true}
+          />
         </div>
 
         {/* Section 1: 340B Savings Analysis - Monthly Totals */}
@@ -253,29 +354,15 @@ export default function Reports() {
               <CardTitle>340B Savings Analysis - Monthly Performance</CardTitle>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-              onClick={() => exportToCSV(
-                  monthlySummary.map((m) => ({
-                    Month: formatMonth(m.month),
-                    "Total Claims": m.total_claims,
-                    "Total Payments": m.total_payments,
-                    "340B Cost": m.total_340b_cost,
-                    "Dispensing Fees": m.total_dispensing_fees,
-                    "340B Benefit": m.benefit_340b,
-                  })),
-                  "340b-savings-analysis"
-                )}
-              >
+              <Button variant="outline" size="sm" onClick={handleExportSavingsCSV}>
                 <Download className="h-4 w-4 mr-2" />
                 CSV
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportToPDF}
-              >
+              <Button variant="outline" size="sm" onClick={handleExportSavingsExcel}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportToPDF}>
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
@@ -288,7 +375,7 @@ export default function Reports() {
               </div>
             ) : monthlySummary.length === 0 ? (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
-                No claims data available
+                No claims data available for the selected date range
               </div>
             ) : (
               <>
@@ -378,28 +465,15 @@ export default function Reports() {
               <CardTitle>Pharmacy Performance Summary</CardTitle>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-              onClick={() => exportToCSV(
-                  pharmacyPerformance.map((p) => ({
-                    "Pharmacy Name": p.pharmacyName,
-                    "Total Claims": p.totalClaims,
-                    "Total Payments": p.totalPayments,
-                    "340B Cost": p.total340BCost,
-                    "340B Benefit": p.benefit340B,
-                  })),
-                  "pharmacy-performance"
-                )}
-              >
+              <Button variant="outline" size="sm" onClick={handleExportPharmacyCSV}>
                 <Download className="h-4 w-4 mr-2" />
                 CSV
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportToPDF}
-              >
+              <Button variant="outline" size="sm" onClick={handleExportPharmacyExcel}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportToPDF}>
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
@@ -412,7 +486,7 @@ export default function Reports() {
               </div>
             ) : pharmacyPerformance.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
-                No pharmacy data available
+                No pharmacy data available for the selected date range
               </div>
             ) : (
               <div className="rounded-md border">
@@ -469,28 +543,15 @@ export default function Reports() {
               <CardTitle>Payer Mix Analysis</CardTitle>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => exportToCSV(
-                  payerMix.map((p) => ({
-                    "Payer Type": p.payerType,
-                    "Claim Count": p.claimCount,
-                    "% of Total": p.percentOfTotal,
-                    "Avg Payment": p.avgPayment,
-                    "Avg 340B Cost": p.avg340BCost,
-                  })),
-                  "payer-mix-analysis"
-                )}
-              >
+              <Button variant="outline" size="sm" onClick={handleExportPayerCSV}>
                 <Download className="h-4 w-4 mr-2" />
                 CSV
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportToPDF}
-              >
+              <Button variant="outline" size="sm" onClick={handleExportPayerExcel}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportToPDF}>
                 <FileText className="h-4 w-4 mr-2" />
                 PDF
               </Button>
@@ -503,7 +564,7 @@ export default function Reports() {
               </div>
             ) : payerMix.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">
-                No payer data available
+                No payer data available for the selected date range
               </div>
             ) : (
               <div className="rounded-md border">
