@@ -68,7 +68,7 @@ const Scripts = () => {
   const { data: filterOptions } = useQuery({
     queryKey: ["scripts-filter-options"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("scripts_filter_options")
         .select("*");
 
@@ -79,7 +79,7 @@ const Scripts = () => {
         pharmacies: [] as string[],
       };
 
-      data?.forEach((item) => {
+      (data || []).forEach((item: any) => {
         if (item.filter_type === "adjudication_status" && item.filter_value) {
           options.statuses.push(item.filter_value);
         } else if (item.filter_type === "pharmacy" && item.filter_value) {

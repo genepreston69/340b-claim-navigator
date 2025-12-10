@@ -744,87 +744,6 @@ export type Database = {
         }
         Relationships: []
       }
-      import_logs: {
-        Row: {
-          id: string
-          user_id: string | null
-          file_name: string
-          file_type: "Scripts" | "Claims"
-          file_size_bytes: number | null
-          status: "Processing" | "Success" | "Failed" | "Partial"
-          total_records: number | null
-          records_imported: number | null
-          records_skipped: number | null
-          records_failed: number | null
-          covered_entities_created: number | null
-          pharmacies_created: number | null
-          prescribers_created: number | null
-          patients_created: number | null
-          drugs_created: number | null
-          locations_created: number | null
-          insurance_plans_created: number | null
-          error_message: string | null
-          errors_json: Json | null
-          started_at: string | null
-          completed_at: string | null
-          duration_ms: number | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          user_id?: string | null
-          file_name: string
-          file_type: "Scripts" | "Claims"
-          file_size_bytes?: number | null
-          status?: "Processing" | "Success" | "Failed" | "Partial"
-          total_records?: number | null
-          records_imported?: number | null
-          records_skipped?: number | null
-          records_failed?: number | null
-          covered_entities_created?: number | null
-          pharmacies_created?: number | null
-          prescribers_created?: number | null
-          patients_created?: number | null
-          drugs_created?: number | null
-          locations_created?: number | null
-          insurance_plans_created?: number | null
-          error_message?: string | null
-          errors_json?: Json | null
-          started_at?: string | null
-          completed_at?: string | null
-          duration_ms?: number | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string | null
-          file_name?: string
-          file_type?: "Scripts" | "Claims"
-          file_size_bytes?: number | null
-          status?: "Processing" | "Success" | "Failed" | "Partial"
-          total_records?: number | null
-          records_imported?: number | null
-          records_skipped?: number | null
-          records_failed?: number | null
-          covered_entities_created?: number | null
-          pharmacies_created?: number | null
-          prescribers_created?: number | null
-          patients_created?: number | null
-          drugs_created?: number | null
-          locations_created?: number | null
-          insurance_plans_created?: number | null
-          error_message?: string | null
-          errors_json?: Json | null
-          started_at?: string | null
-          completed_at?: string | null
-          duration_ms?: number | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
     }
     Views: {
       adherence_filter_options: {
@@ -850,14 +769,6 @@ export type Database = {
         Row: {
           filter_type: string | null
           filter_value: string | null
-        }
-        Relationships: []
-      }
-      scripts_filter_options: {
-        Row: {
-          filter_type: string | null
-          filter_value: string | null
-          count: number | null
         }
         Relationships: []
       }
@@ -1157,76 +1068,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      contract_pharmacy_exclusion_analysis: {
-        Row: {
-          ndc: number | null
-          drug_name: string | null
-          pharmacy_id: string | null
-          pharmacy_name: string | null
-          claim_count: number | null
-          total_340b_cost: number | null
-          total_retail_cost: number | null
-          total_profit_loss: number | null
-          avg_profit_per_claim: number | null
-          has_340b_benefit: boolean | null
-          total_pharmacies_dispensing: number | null
-          pharmacies_with_benefit: number | null
-          pharmacies_without_benefit: number | null
-          has_exclusion_pattern: boolean | null
-          estimated_lost_revenue: number | null
-          exclusion_status: string | null
-        }
-        Relationships: []
-      }
-      drug_exclusion_summary: {
-        Row: {
-          ndc: number | null
-          drug_name: string | null
-          total_pharmacies: number | null
-          pharmacies_with_benefit: number | null
-          pharmacies_excluded: number | null
-          total_claims: number | null
-          claims_with_benefit: number | null
-          claims_without_benefit: number | null
-          total_profit_loss: number | null
-          total_estimated_lost_revenue: number | null
-          exclusion_status: string | null
-        }
-        Relationships: []
-      }
-      medicaid_carve_analysis: {
-        Row: {
-          month: string | null
-          ndc: number | null
-          drug_name: string | null
-          pharmacy_name: string | null
-          carve_status: string | null
-          claim_count: number | null
-          total_quantity: number | null
-          total_340b_cost: number | null
-          total_retail_cost: number | null
-          total_payments: number | null
-          total_profit_loss: number | null
-          total_patient_pay: number | null
-          total_third_party_pay: number | null
-        }
-        Relationships: []
-      }
-      medicaid_carve_summary: {
-        Row: {
-          month: string | null
-          carved_in_claims: number | null
-          carved_in_payments: number | null
-          carved_in_benefit: number | null
-          carved_out_claims: number | null
-          carved_out_payments: number | null
-          total_medicaid_claims: number | null
-          non_medicaid_claims: number | null
-          non_medicaid_benefit: number | null
-          carve_out_rate_pct: number | null
-        }
-        Relationships: []
       }
     }
     Functions: {
